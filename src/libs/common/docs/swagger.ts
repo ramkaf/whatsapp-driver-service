@@ -5,20 +5,30 @@ export function createSwaggerDocument(app: INestApplication) {
   const config = new DocumentBuilder()
     .setTitle('WhatsApp Service API')
     .setDescription(
-      'Link WhatsApp Business, retrieve the pairing QR, list joined groups, and send group messages. ' +
-        'Use Authorize with WHATSAPP_API_TOKEN (paste the token without the Bearer prefix). ' +
-        'Start with POST /whatsapp/connect, then poll GET /whatsapp/status or GET /whatsapp/qr. ' +
-        'Saved sessions reconnect without generating a QR. Incoming group monitoring runs automatically after connecting; it has no HTTP endpoint.',
+      'راهنمای API واتساپ: ابتدا اتصال را برقرار کنید، سپس وضعیت یا QR را دریافت کنید. مسیرهای گروه به اتصال فعال نیاز دارند. برای ارسال توکن در همه درخواست‌ها، دکمه Authorize را بزنید و توکن را بدون پیشوند Bearer وارد کنید. پایش پیام‌ها و ری‌اکشن‌ها از طریق رویدادهای سوکت انجام می‌شود و endpoint HTTP ندارد.\n\n' +
+        'Manage WhatsApp pairing and groups. All API routes start with /api/v1. ' +
+        'Start with POST /api/v1/whatsapp/connection/connect, then poll GET /api/v1/whatsapp/connection/status or GET /api/v1/whatsapp/connection/qr. ' +
+        'Saved sessions reconnect without generating a QR. Group endpoints require an authenticated WhatsApp connection and return 503 otherwise. ' +
+        'Use Authorize to enter your token without the Bearer prefix; Swagger sends it in the Authorization header for all API requests. POST /api/v1/whatsapp/connection/reset-session enforces WHATSAPP_API_TOKEN and archives credentials before starting a fresh pairing session. / ریست نشست به توکن معتبر سرور نیاز دارد؛ پس از ریست باید QR جدید با گوشی اسکن شود. Other endpoints retain their existing authentication behavior. Message monitoring and reactions run through socket events and have no HTTP endpoints.',
     )
     .setVersion('1.0')
-    .addTag('WhatsApp', 'Pairing, connection status, groups, and messaging')
     .addBearerAuth(
       {
         type: 'http',
         scheme: 'bearer',
-        description: 'The WHATSAPP_API_TOKEN configured on the server',
+        description:
+          'Enter the token without the Bearer prefix. / توکن را بدون پیشوند Bearer وارد کنید.',
       },
       'whatsapp-token',
+    )
+    .addSecurityRequirements('whatsapp-token')
+    .addTag(
+      'WhatsApp Connection',
+      'Pairing QR and connection lifecycle / اتصال، وضعیت و کد QR',
+    )
+    .addTag(
+      'WhatsApp Groups',
+      'Group metadata, participants, roles and invitations / اطلاعات گروه، اعضا، نقش‌ها و دعوت‌نامه‌ها',
     )
     .build();
   return SwaggerModule.createDocument(app, config);

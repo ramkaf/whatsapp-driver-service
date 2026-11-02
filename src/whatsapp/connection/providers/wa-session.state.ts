@@ -60,7 +60,7 @@ export class WhatsappSessionState {
       hasSavedSession: this.hasSavedSession,
       lastDisconnectCode: this.lastDisconnectCode,
       qrUnavailableReason: this.getQrUnavailableReason(),
-      qrEndpoint: '/whatsapp/qr',
+      qrEndpoint: '/api/v1/whatsapp/connection/qr',
     };
   }
 
@@ -72,13 +72,13 @@ export class WhatsappSessionState {
         return 'WhatsApp is already connected.';
 
       case SessionStatus.LOGGED_OUT:
-        return 'WhatsApp logged out. A fresh pairing session is required.';
+        return 'WhatsApp logged out. Call POST /api/v1/whatsapp/connection/reset-session with the server API token, then scan the new QR.';
 
       case SessionStatus.ERROR:
         return 'WhatsApp connection failed. Check server logs.';
 
       case SessionStatus.DISCONNECTED:
-        return 'Call POST /whatsapp/connect to connect.';
+        return 'Call POST /api/v1/whatsapp/connection/connect to connect.';
 
       default:
         return this.hasSavedSession

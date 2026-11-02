@@ -1,19 +1,29 @@
-import { Injectable, BadGatewayException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadGatewayException,
+  Logger,
+  ServiceUnavailableException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { WhatsappConnectService } from '../../connection/providers/wa-connect.service.ts';
+import { WhatsappGroupRepository } from './whatsapp-group.repository.ts';
+import { normalizePhoneNumber } from '../../../libs/common/utils/helper.util.ts';
 
 @Injectable()
 export class WhatsappGroupService {
   private readonly logger = new Logger(WhatsappGroupService.name);
 
-  constructor(private readonly connection: WhatsappConnectService) {}
+  constructor(
+    private readonly connection: WhatsappConnectService,
+    private readonly groupRepository: WhatsappGroupRepository,
+  ) {}
 
   async findAll() {
-    const socket = this.connection.getSocket();
-
     try {
-      const groups = await socket.groupFetchAllParticipating();
+      const groups = await this.groupRepository.findAll();
 
-      return Object.values(groups).map((group) => ({
+      return groups.map((group) => ({
         id: group.id,
         name: group.subject,
         description: group.desc ?? null,
@@ -29,10 +39,10 @@ export class WhatsappGroupService {
   }
 
   async findOne(groupJid: string) {
-    const socket = this.connection.getSocket();
-
     try {
-      const group = await socket.groupMetadata(groupJid);
+      const group = await this.groupRepository.findOne(groupJid);
+      if (!group)
+        throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
 
       return {
         id: group.id,
@@ -50,21 +60,46 @@ export class WhatsappGroupService {
   }
 
   async getParticipants(groupJid: string) {
-    const socket = this.connection.getSocket();
-
     try {
-      const group = await socket.groupMetadata(groupJid);
+      const group = await this.groupRepository.findOne(groupJid);
+      if (!group)
+        throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
+
       return {
         groupJid: group.id,
         total: group.participants.length,
         participants: group.participants.map((participant) => ({
           id: participant.id,
           admin: participant.admin ?? null,
-          phoneNumer: participant.phoneNumber,
+          phoneNumber:participant.phoneNumber ?? null
         })),
       };
     } catch (error) {
       this.handleError(error, 'fetch group participants');
+    }
+  }
+
+  async getInfo(groupJid: string) {
+    try {
+      const group = await this.groupRepository.findOne(groupJid);
+      if (!group)
+        throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
+
+      return {
+        id: group.id,
+        name: group.subject,
+        description: group.desc ?? null,
+        owner: group.owner ?? null,
+        participantsCount: group.participants.length,
+        participants: group.participants.map((participant) => ({
+          id: participant.id,
+          phoneNumber: participant.phoneNumber ?? null,
+          username: participant.username ?? null,
+          admin: participant.admin ?? null,
+        })),
+      };
+    } catch (error) {
+      this.handleError(error, 'fetch group information');
     }
   }
 
@@ -87,6 +122,10 @@ export class WhatsappGroupService {
   }
 
   async updateSubject(groupJid: string, subject: string) {
+    const group = await this.groupRepository.findOne(groupJid);
+    if (!group)
+      throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
+
     const socket = this.connection.getSocket();
 
     try {
@@ -103,6 +142,10 @@ export class WhatsappGroupService {
   }
 
   async updateDescription(groupJid: string, description: string) {
+    const group = await this.groupRepository.findOne(groupJid);
+    if (!group)
+      throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
+
     const socket = this.connection.getSocket();
 
     try {
@@ -118,21 +161,42 @@ export class WhatsappGroupService {
     }
   }
 
-  async addParticipants(groupJid: string, participants: string[]) {
-    const socket = this.connection.getSocket();
+async addParticipants(
+  groupJid: string,
+  phoneNumbers: string[],
+) {
+  const group = await this.groupRepository.findOne(groupJid);
 
-    try {
-      return await socket.groupParticipantsUpdate(
-        groupJid,
-        participants,
-        'add',
-      );
-    } catch (error) {
-      this.handleError(error, 'add group participants');
-    }
+  if (!group) {
+    throw new NotFoundException(
+      `WhatsApp group ${groupJid} was not found`,
+    );
   }
 
+  const socket = this.connection.getSocket();
+
+  try {
+    const participants = phoneNumbers.map((phone) => {
+      const normalizedPhone = normalizePhoneNumber(phone);
+
+      return `${normalizedPhone}@s.whatsapp.net`;
+    });
+
+    return await socket.groupParticipantsUpdate(
+      groupJid,
+      participants,
+      'add',
+    );
+  } catch (error: unknown) {
+    this.handleError(error, 'add group participants');
+  }
+}
+
   async removeParticipants(groupJid: string, participants: string[]) {
+    const group = await this.groupRepository.findOne(groupJid);
+    if (!group)
+      throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
+
     const socket = this.connection.getSocket();
 
     try {
@@ -151,6 +215,10 @@ export class WhatsappGroupService {
     participants: string[],
     action: 'promote' | 'demote',
   ) {
+    const group = await this.groupRepository.findOne(groupJid);
+    if (!group)
+      throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
+
     const socket = this.connection.getSocket();
 
     try {
@@ -165,6 +233,10 @@ export class WhatsappGroupService {
   }
 
   async getInviteCode(groupJid: string) {
+    const group = await this.groupRepository.findOne(groupJid);
+    if (!group)
+      throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
+
     const socket = this.connection.getSocket();
 
     try {
@@ -181,6 +253,10 @@ export class WhatsappGroupService {
   }
 
   async revokeInviteCode(groupJid: string) {
+    const group = await this.groupRepository.findOne(groupJid);
+    if (!group)
+      throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
+
     const socket = this.connection.getSocket();
 
     try {
@@ -211,13 +287,14 @@ export class WhatsappGroupService {
   }
 
   async leave(groupJid: string) {
-    const socket = this.connection.getSocket();
+    const group = await this.groupRepository.findOne(groupJid);
+    if (!group)
+      throw new NotFoundException(`WhatsApp group ${groupJid} was not found`);
 
+    const socket = this.connection.getSocket();
     try {
       await socket.groupLeave(groupJid);
-
       this.logger.log(`Left WhatsApp group: ${groupJid}`);
-
       return {
         groupJid,
         left: true,
@@ -228,6 +305,8 @@ export class WhatsappGroupService {
   }
 
   private handleError(error: unknown, operation: string): never {
+    if (error instanceof ServiceUnavailableException) throw error;
+
     this.logger.error(
       `Failed to ${operation}`,
       error instanceof Error ? error.stack : String(error),

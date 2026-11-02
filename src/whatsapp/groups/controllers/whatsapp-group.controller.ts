@@ -7,70 +7,86 @@ import {
   Patch,
   Post,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 
-import { ApiOperation, ApiTags, ApiParam } from '@nestjs/swagger';
+import { Auth } from '../../../libs/common/document/authentication.decorator.ts';
+import { ApiTags } from '@nestjs/swagger';
 import { WhatsappGroupService } from './../providers/whatsapp-group.service.ts';
-import { CreateGroupDto } from './../dto/create-group.dto.ts';
-import { UpdateGroupSubjectDto } from './../dto/update-group-subject.dto.ts';
-import { UpdateGroupDescriptionDto } from './../dto/update-group-description.dto.ts';
-import { GroupParticipantsDto } from './../dto/group-participants.dto.ts';
-import { GroupParticipantRoleDto } from './../dto/group-participant-role.dto.ts';
-import { JoinGroupDto } from './../dto/join-group.dto.ts';
 import { WhatsappConnectionGuard } from '../../connection/guards/whatsapp-connection.guard.ts';
+import { ApiOperationWithDocs } from '../../../libs/common/document/common-swagger.decorator.ts';
+import {
+  CreateGroupDto,
+  UpdateGroupSubjectDto,
+  UpdateGroupDescriptionDto,
+  GroupParticipantsDto,
+  GroupParticipantRoleDto,
+  JoinGroupDto,
+  GroupJidParamDto,
+} from './../dto/index.ts';
 
-@ApiTags('WhatsApp Groups')
+@Auth()
+@ApiTags('whatsapp groups api')
 @UseGuards(WhatsappConnectionGuard)
 @Controller('whatsapp/groups')
 export class WhatsappGroupController {
   constructor(private readonly whatsappGroupsService: WhatsappGroupService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all joined WhatsApp groups' })
+  @ApiOperationWithDocs('Get all joined WhatsApp groups')
   findAll() {
     return this.whatsappGroupsService.findAll();
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create WhatsApp group' })
+  @ApiOperationWithDocs('Create WhatsApp group')
   create(@Body() dto: CreateGroupDto) {
     return this.whatsappGroupsService.create(dto.subject, dto.participants);
   }
 
   @Post('join')
-  @ApiOperation({ summary: 'Join group using invite code' })
+  @ApiOperationWithDocs('Join group using invite code')
   join(@Body() dto: JoinGroupDto) {
     return this.whatsappGroupsService.joinByInvite(dto.code);
   }
 
   @Get(':groupJid')
-  @ApiOperation({ summary: 'Get WhatsApp group details' })
-  findOne(@Param('groupJid') groupJid: string) {
+  @ApiOperationWithDocs('Get WhatsApp group details')
+  findOne(@Param() groupJidDto: GroupJidParamDto) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.findOne(groupJid);
   }
 
   @Get(':groupJid/participants')
-  @ApiOperation({ summary: 'Get group participants' })
-  getParticipants(@Param('groupJid') groupJid: string) {
+  @ApiOperationWithDocs('Get group participants')
+  getParticipants(@Param() groupJidDto: GroupJidParamDto) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.getParticipants(groupJid);
   }
 
+  @Get(':groupJid/info')
+  @ApiOperationWithDocs('Get group information and participant details')
+  getInfo(@Param() groupJidDto: GroupJidParamDto) {
+    const { groupJid } = groupJidDto;
+    return this.whatsappGroupsService.getInfo(groupJid);
+  }
+
   @Patch(':groupJid/subject')
-  @ApiOperation({ summary: 'Update group subject' })
+  @ApiOperationWithDocs('Update group subject')
   updateSubject(
-    @Param('groupJid') groupJid: string,
+    @Param() groupJidDto: GroupJidParamDto,
     @Body() dto: UpdateGroupSubjectDto,
   ) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.updateSubject(groupJid, dto.subject);
   }
 
   @Patch(':groupJid/description')
-  @ApiOperation({ summary: 'Update group description' })
+  @ApiOperationWithDocs('Update group description')
   updateDescription(
-    @Param('groupJid') groupJid: string,
+    @Param() groupJidDto: GroupJidParamDto,
     @Body() dto: UpdateGroupDescriptionDto,
   ) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.updateDescription(
       groupJid,
       dto.description,
@@ -78,11 +94,12 @@ export class WhatsappGroupController {
   }
 
   @Post(':groupJid/participants')
-  @ApiOperation({ summary: 'Add group participants' })
+  @ApiOperationWithDocs('Add group participants')
   addParticipants(
-    @Param('groupJid') groupJid: string,
+    @Param() groupJidDto: GroupJidParamDto,
     @Body() dto: GroupParticipantsDto,
   ) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.addParticipants(
       groupJid,
       dto.participants,
@@ -90,11 +107,12 @@ export class WhatsappGroupController {
   }
 
   @Delete(':groupJid/participants')
-  @ApiOperation({ summary: 'Remove group participants' })
+  @ApiOperationWithDocs('Remove group participants')
   removeParticipants(
-    @Param('groupJid') groupJid: string,
+    @Param() groupJidDto: GroupJidParamDto,
     @Body() dto: GroupParticipantsDto,
   ) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.removeParticipants(
       groupJid,
       dto.participants,
@@ -102,11 +120,12 @@ export class WhatsappGroupController {
   }
 
   @Patch(':groupJid/participants/role')
-  @ApiOperation({ summary: 'Promote or demote participants' })
+  @ApiOperationWithDocs('Promote or demote participants')
   changeParticipantRole(
-    @Param('groupJid') groupJid: string,
+    @Param() groupJidDto: GroupJidParamDto,
     @Body() dto: GroupParticipantRoleDto,
   ) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.changeParticipantRole(
       groupJid,
       dto.participants,
@@ -115,20 +134,23 @@ export class WhatsappGroupController {
   }
 
   @Get(':groupJid/invite')
-  @ApiOperation({ summary: 'Get group invite code' })
-  getInviteCode(@Param('groupJid') groupJid: string) {
+  @ApiOperationWithDocs('Get group invite code')
+  getInviteCode(@Param() groupJidDto: GroupJidParamDto) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.getInviteCode(groupJid);
   }
 
   @Post(':groupJid/invite/revoke')
-  @ApiOperation({ summary: 'Revoke group invite code' })
-  revokeInviteCode(@Param('groupJid') groupJid: string) {
+  @ApiOperationWithDocs('Revoke group invite code')
+  revokeInviteCode(@Param() groupJidDto: GroupJidParamDto) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.revokeInviteCode(groupJid);
   }
 
   @Post(':groupJid/leave')
-  @ApiOperation({ summary: 'Leave WhatsApp group' })
-  leave(@Param('groupJid') groupJid: string) {
+  @ApiOperationWithDocs('Leave WhatsApp group')
+  leave(@Param() groupJidDto: GroupJidParamDto) {
+    const { groupJid } = groupJidDto;
     return this.whatsappGroupsService.leave(groupJid);
   }
 }

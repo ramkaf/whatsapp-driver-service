@@ -259,6 +259,38 @@ This first implementation uses Baileys' file-based auth helper for local use.
 Use a database-backed auth store before running multiple instances or deploying
 this as a production service. No message is sent during startup or pairing.
 
+### Recover a logged-out session through the API
+
+When `GET /api/v1/whatsapp/connection/status` reports `logged_out`, an operator
+can start fresh pairing without deleting files or changing the auth directory:
+
+```bash
+curl -X POST http://localhost:3001/api/v1/whatsapp/connection/reset-session \
+  -H "Authorization: Bearer $WHATSAPP_API_TOKEN"
+```
+
+This endpoint verifies the configured `WHATSAPP_API_TOKEN` and returns 401 for
+missing or invalid tokens, or 503 if the token is not configured or reset fails.
+It stops reconnects and the old socket, drains credential and Signal key writes,
+and moves the old auth directory to a sibling named
+`<auth-directory>.archive-<timestamp>-<uuid>`. Archives retain credentials and
+must receive the same access controls as the live session. Concurrent reset
+requests share one operation. Only one application process may own this session;
+the reset lock does not coordinate multiple replicas.
+
+The 201 response starts pairing; it does not mean WhatsApp is connected yet.
+Poll `GET /api/v1/whatsapp/connection/qr`, display `qrDataUrl`, and scan it from
+the phone's Linked devices screen. Check status until it becomes `connected`.
+Reset does not remove the previously linked device from the phone. Existing
+connect/status/QR endpoints retain their existing authentication behavior.
+Use reset deliberately after logout, rather than automatically on every network
+disconnect. A temporary disconnect continues to use the existing reconnect policy.
+
+در وضعیت `logged_out`، اپراتور با ارسال توکن سرور به مسیر `reset-session`
+نشست قبلی را آرشیو و اتصال تازه را آغاز می‌کند؛ سپس باید QR جدید را از مسیر
+`/api/v1/whatsapp/connection/qr` دریافت و با گوشی اسکن کند. ریست نشست روی
+پروداکشن انجام‌شده فرض نمی‌شود؛ این API باید پس از استقرار توسط اپراتور اجرا شود.
+
 ## Monitor incoming group messages
 
 After `/whatsapp/connect` pairs the account, incoming messages from **all joined

@@ -7,6 +7,7 @@ import { WhatsappSessionState } from './providers/wa-session.state.ts';
 
 import { WhatsappConnectController } from './controllers/whatsap-connect.controller.ts';
 import { WhatsappConnectionGuard } from './guards/whatsapp-connection.guard.ts';
+import { WhatsappAdminGuard } from './guards/whatsapp-admin.guard.ts';
 
 import { WhatsappMessageCoreModule } from '../messages/core/whatsapp-message-core.module.ts';
 
@@ -21,6 +22,7 @@ import { WhatsappMessageCoreModule } from '../messages/core/whatsapp-message-cor
     WhatsappSocketFactory,
     WhatsappSessionState,
     WhatsappConnectionGuard,
+    WhatsappAdminGuard,
   ],
 
   exports: [WhatsappConnectService, WhatsappConnectionGuard],
