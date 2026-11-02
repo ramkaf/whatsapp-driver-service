@@ -13,6 +13,7 @@ import { WhatsappSessionState } from './wa-session.state.ts';
 import qrcode from 'qrcode-terminal';
 import { WhatsappConnectionHandler } from './wa-connection.handler.ts';
 import { ConnectionResult } from '../interfaces/wa-connection-handler.interface.ts';
+import { WhatsappEventListener } from '../../messages/core/providers/whatsapp-event-listener.service.ts';
 @Injectable()
 export class WhatsappConnectService
   implements OnModuleDestroy, OnApplicationBootstrap
@@ -30,6 +31,7 @@ export class WhatsappConnectService
     private readonly factory: WhatsappSocketFactory,
     private readonly state: WhatsappSessionState,
     private readonly handler: WhatsappConnectionHandler,
+    private readonly eventListener: WhatsappEventListener,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -153,6 +155,7 @@ export class WhatsappConnectService
       this.socket = socket;
       this.state.setSavedSession(hasSavedSession);
 
+      // Register all socket listeners
       this.registerEvents(socket, saveCreds);
     } catch (error) {
       this.state.setDisconnected(SessionStatus.ERROR);
@@ -172,6 +175,10 @@ export class WhatsappConnectService
     socket: WASocket,
     saveCreds: () => Promise<void>,
   ): void {
+    // Message events
+    this.eventListener.register(socket, () => this.isActive(socket));
+
+    // Credentials event
     let saveQueue = Promise.resolve();
 
     socket.ev.on('creds.update', (creds) => {
@@ -181,7 +188,6 @@ export class WhatsappConnectService
         this.state.setSavedSession(true);
       }
 
-      // Serialize credential writes for this socket.
       saveQueue = saveQueue
         .then(async () => {
           if (!this.isActive(socket)) return;
@@ -194,6 +200,7 @@ export class WhatsappConnectService
         });
     });
 
+    // Connection event
     socket.ev.on('connection.update', (update) => {
       if (!this.isActive(socket)) return;
 

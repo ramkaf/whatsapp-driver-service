@@ -1,13 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { makeWASocket, useMultiFileAuthState, type WASocket } from 'baileys';
+import { makeWASocket, useMultiFileAuthState } from 'baileys';
 
 import { mkdir, chmod } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { appConfiguration } from '#common';
 import { CreatedWaSocket } from '../interfaces/wa-socket-factorty.interface.ts';
+import { JsonlService } from '../../messages/core/providers/jsonl.service.ts';
 
 @Injectable()
 export class WhatsappSocketFactory {
+  constructor(private readonly jsonlService: JsonlService) {}
+
   async create(): Promise<CreatedWaSocket> {
     const authPath =
       appConfiguration().whatsapp.authDir ?? '.data/whatsapp-auth';
@@ -28,6 +31,7 @@ export class WhatsappSocketFactory {
       markOnlineOnConnect: false,
       syncFullHistory: false,
       shouldSyncHistoryMessage: () => false,
+      getMessage: (key) => this.jsonlService.getMessage(key),
     });
 
     return {
