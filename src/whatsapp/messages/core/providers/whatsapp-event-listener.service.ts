@@ -18,7 +18,7 @@ export class WhatsappEventListener {
 
     this.registeredSockets.add(socket);
 
-    // Register event listeners for incoming messages, updates, and deletions
+    // Register event listeners for incoming messages
     socket.ev.on('messages.upsert', ({ messages }) => {
       if (!isActive()) return;
 
@@ -28,7 +28,7 @@ export class WhatsappEventListener {
           this.logError('messages.upsert', error);
         });
     });
-    // Register event listeners for incoming messages, updates, and deletions
+    // Register event listeners for incoming  updates,
     socket.ev.on('messages.update', (updates) => {
       if (!isActive()) return;
 
@@ -38,6 +38,7 @@ export class WhatsappEventListener {
           this.logError('messages.update', error);
         });
     });
+    // listeners for incoming reactions
     socket.ev.on('messages.reaction', (reactions) => {
       if (!isActive()) return;
 
@@ -47,7 +48,7 @@ export class WhatsappEventListener {
           this.logError('messages.reaction', error);
         });
     });
-    // Register event listeners for incoming messages, updates, and deletions
+    // Register event listeners for incoming deletions
     socket.ev.on('messages.delete', (data) => {
       if (!isActive()) return;
 

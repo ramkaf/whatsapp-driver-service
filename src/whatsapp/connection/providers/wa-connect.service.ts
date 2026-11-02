@@ -22,6 +22,9 @@ export class WhatsappConnectService
 
   private socket?: WASocket;
   private connecting?: Promise<void>;
+  private resetting?: Promise<void>;
+  private credentialWrites = Promise.resolve();
+  private lifecycleVersion = 0;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
 
   private reconnectAttempts = 0;
@@ -51,6 +54,7 @@ export class WhatsappConnectService
     this.clearReconnectTimer();
 
     await this.connecting?.catch(() => undefined);
+    await this.resetting?.catch(() => undefined);
 
     const socket = this.socket;
     this.socket = undefined;
@@ -67,6 +71,11 @@ export class WhatsappConnectService
       throw new ServiceUnavailableException(
         'WhatsApp service is shutting down',
       );
+    }
+
+    if (this.resetting) {
+      await this.resetting;
+      return this.getStatus();
     }
 
     if (this.connecting) {
@@ -94,6 +103,53 @@ export class WhatsappConnectService
 
   getStatus() {
     return this.state.getSnapshot();
+  }
+
+  async resetSession(): Promise<
+    ReturnType<WhatsappSessionState['getSnapshot']>
+  > {
+    if (this.stopped) {
+      throw new ServiceUnavailableException(
+        'WhatsApp service is shutting down',
+      );
+    }
+    if (this.resetting) {
+      await this.resetting;
+      return this.getStatus();
+    }
+
+    const operation = Promise.resolve().then(async () => {
+      this.lifecycleVersion++;
+      this.clearReconnectTimer();
+      await this.connecting?.catch(() => undefined);
+      const socket = this.socket;
+      this.socket = undefined;
+      this.state.setDisconnected(SessionStatus.DISCONNECTED);
+      if (socket) await this.endSocket(socket);
+      await this.credentialWrites;
+      try {
+        await this.factory.archiveSession();
+        this.state.setSavedSession(false);
+        this.reconnectAttempts = 0;
+        if (!this.stopped) await this.openSocket();
+      } catch (error) {
+        this.state.setDisconnected(SessionStatus.ERROR);
+        this.logger.error(
+          'Could not reset WhatsApp session',
+          error instanceof Error ? error.stack : String(error),
+        );
+        throw new ServiceUnavailableException(
+          'Could not reset WhatsApp session',
+        );
+      }
+    });
+    this.resetting = operation;
+    try {
+      await operation;
+    } finally {
+      if (this.resetting === operation) this.resetting = undefined;
+    }
+    return this.getStatus();
   }
 
   async getQr() {
@@ -133,7 +189,7 @@ export class WhatsappConnectService
   }
 
   getSocket(): WASocket {
-    if (!this.state.isConnected() || !this.socket) {
+    if (this.resetting || !this.state.isConnected() || !this.socket) {
       throw new ServiceUnavailableException('WhatsApp is not connected');
     }
 
@@ -179,7 +235,6 @@ export class WhatsappConnectService
     this.eventListener.register(socket, () => this.isActive(socket));
 
     // Credentials event
-    let saveQueue = Promise.resolve();
 
     socket.ev.on('creds.update', (creds) => {
       if (!this.isActive(socket)) return;
@@ -188,7 +243,7 @@ export class WhatsappConnectService
         this.state.setSavedSession(true);
       }
 
-      saveQueue = saveQueue
+      this.credentialWrites = this.credentialWrites
         .then(async () => {
           if (!this.isActive(socket)) return;
           await saveCreds();
@@ -232,11 +287,13 @@ export class WhatsappConnectService
   ): Promise<void> {
     if (!this.isActive(socket)) return;
 
+    const version = this.lifecycleVersion;
+
     this.socket = undefined;
 
     await this.endSocket(socket);
 
-    if (this.stopped) return;
+    if (this.stopped || version !== this.lifecycleVersion) return;
 
     if (!result.shouldReconnect) {
       return;
@@ -251,6 +308,17 @@ export class WhatsappConnectService
 
   private scheduleReconnect(delayMs: number): void {
     if (this.stopped || this.reconnectTimer) return;
+    if (this.resetting) {
+      const version = this.lifecycleVersion;
+      void this.resetting.then(
+        () => {
+          if (version === this.lifecycleVersion)
+            this.scheduleReconnect(delayMs);
+        },
+        () => undefined,
+      );
+      return;
+    }
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
@@ -282,6 +350,7 @@ export class WhatsappConnectService
     error: unknown,
   ): Promise<void> {
     if (!this.isActive(socket)) return;
+    const version = this.lifecycleVersion;
 
     this.logger.error(
       'Could not save WhatsApp credentials',
@@ -292,7 +361,7 @@ export class WhatsappConnectService
 
     await this.endSocket(socket);
 
-    if (!this.stopped) {
+    if (!this.stopped && version === this.lifecycleVersion) {
       this.state.setDisconnected(SessionStatus.ERROR);
     }
   }
@@ -308,6 +377,8 @@ export class WhatsappConnectService
   }
 
   async disconnect(): Promise<void> {
+    await this.resetting?.catch(() => undefined);
+    this.lifecycleVersion++;
     this.clearReconnectTimer();
 
     // Wait until socket creation finishes, if in progress.

@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { normalizeMessageContent, WAMessageStubType } from 'baileys';
-import type { WASocket, WAMessage, BaileysEventMap, proto, WAMessageKey } from 'baileys';
+import type {
+  WASocket,
+  WAMessage,
+  BaileysEventMap,
+  proto,
+  WAMessageKey,
+} from 'baileys';
 import { WhatsappMediaService } from './whatsapp-media.service.ts';
 import { extractRepliedMessage } from '../../utils/message.util.ts';
 import { JsonlService } from './jsonl.service.ts';
@@ -134,7 +140,7 @@ export class WhatsappMessageService {
     _socket: WASocket,
     reactions: BaileysEventMap['messages.reaction'],
   ): Promise<void> {
-    this.jsonlService.append("a.jsonl", {
+    this.jsonlService.append('a.jsonl', {
       event: 'message.reaction',
       receivedAt: new Date().toISOString(),
       reactions,
@@ -194,4 +200,3 @@ export class WhatsappMessageService {
 // function saveToFile(arg0: { event: string; receivedAt: string; reactions: { key: WAMessageKey; reaction: proto.IReaction; }[]; }) {
 //   throw new Error('Function not implemented.');
 // }
-
