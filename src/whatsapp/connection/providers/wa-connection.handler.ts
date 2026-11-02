@@ -4,23 +4,17 @@ import type { ConnectionState, WASocket } from 'baileys';
 import { WhatsappSessionState } from './wa-session.state.ts';
 import { getReconnectDecision } from './wa-reconnect.policy.ts';
 import { ConnectionResult } from '../interfaces/wa-connection-handler.interface.ts';
-import { WhatsappMessageService } from '../../messages/core/providers/whatsapp-message.service.ts';
+
 @Injectable()
 export class WhatsappConnectionHandler {
   private readonly logger = new Logger(WhatsappConnectionHandler.name);
-  private readonly registeredSockets = new WeakSet<WASocket>();
-  constructor(
-    private readonly state: WhatsappSessionState,
-    private readonly whatsappMessageService: WhatsappMessageService,
-  ) {}
+  constructor(private readonly state: WhatsappSessionState) {}
 
   handle(
     socket: WASocket,
     update: Partial<ConnectionState>,
     attempts: number,
   ): ConnectionResult {
-    this.registerMessageListener(socket);
-
     switch (update.connection) {
       case 'close':
         return this.handleClosed(update, attempts);
@@ -127,25 +121,5 @@ export class WhatsappConnectionHandler {
     }
 
     return typeof output.statusCode === 'number' ? output.statusCode : null;
-  }
-
-  private registerMessageListener(socket: WASocket): void {
-    if (this.registeredSockets.has(socket)) {
-      return;
-    }
-    this.registeredSockets.add(socket);
-
-    socket.ev.on('messages.upsert', ({ messages }) => {
-      void this.whatsappMessageService
-        .handleUpsert(socket, messages)
-        .catch((error: any) => {
-          this.logger.error(
-            'Failed to handle incoming messages',
-            error instanceof Error ? error.stack : String(error),
-          );
-        });
-    });
-
-    this.logger.log('WhatsApp message listener registered');
   }
 }
