@@ -1,0 +1,13 @@
+
+services:
+  docs:
+    container_name: mkdocs-docs
+    build:
+      context: .
+      dockerfile: docker/DockerfileDocs
+    ports:
+      - "4009:8080"
+    volumes:
+      - ./docs:/app/docs
+      - ./mkdocs.yml:/app/mkdocs.yml
+    restart: unless-stopped

@@ -1,0 +1,434 @@
+
+/* ==========================================
+   MATCHING DOCUMENTATION
+   Persian Green - Classic Theme
+========================================== */
+
+/* ---------- Colors ---------- */
+
+:root {
+  --md-primary-fg-color: #009b77;
+  --md-primary-fg-color--light: #27b394;
+  --md-primary-fg-color--dark: #006b54;
+
+  --md-accent-fg-color: #00866a;
+  --md-typeset-a-color: #00866a;
+
+  --md-default-bg-color: #f7f5ef;
+  --md-default-fg-color: #203c34;
+
+  --matching-green: #009b77;
+  --matching-dark-green: #006b54;
+  --matching-gold: #d9c9a3;
+  --matching-border: #e4e5dc;
+  --matching-card-bg: #ffffff;
+}
+
+/* ---------- Dark Mode ---------- */
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #009b77;
+  --md-primary-fg-color--light: #27b394;
+  --md-primary-fg-color--dark: #006b54;
+
+  --md-accent-fg-color: #5ed6b6;
+  --md-typeset-a-color: #5ed6b6;
+
+  --md-default-bg-color: #14231f;
+  --md-default-fg-color: #e3eee9;
+
+  --matching-border: #334b42;
+  --matching-card-bg: #1b3029;
+  --matching-gold: #b9a77d;
+}
+
+/* ---------- Header ---------- */
+
+.md-header {
+  background-color: #006b54;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.md-header__title {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.md-header__button.md-logo {
+  color: #ffffff;
+}
+
+/* ---------- Top Navigation ---------- */
+
+.md-tabs {
+  background-color: #006b54;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.md-tabs__link {
+  font-weight: 500;
+  transition: opacity 0.2s ease;
+}
+
+.md-tabs__link:hover,
+.md-tabs__link--active {
+  opacity: 1;
+}
+
+/* ---------- Main Content ---------- */
+
+.md-main__inner {
+  margin-top: 1.5rem;
+}
+
+.md-content__inner {
+  padding-top: 1rem;
+}
+
+.md-typeset {
+  font-size: 0.8rem;
+  line-height: 1.9;
+  direction: rtl;
+  text-align: right;
+}
+
+.md-header,
+.md-tabs,
+.md-sidebar,
+.md-footer,
+.md-search {
+  direction: rtl;
+}
+
+.md-typeset pre,
+.md-typeset code,
+.md-typeset .highlight,
+.md-typeset .mermaid {
+  direction: ltr;
+  text-align: left;
+}
+
+.md-typeset h1 {
+  color: var(--md-default-fg-color);
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  border-bottom: 2px solid var(--matching-gold);
+  padding-bottom: 0.65rem;
+}
+
+.md-typeset h2 {
+  font-weight: 650;
+  border-left: 3px solid var(--matching-green);
+  padding-left: 12px;
+  margin-top: 2rem;
+}
+
+.md-typeset h3 {
+  font-weight: 600;
+}
+
+.md-typeset p {
+  line-height: 1.95;
+}
+
+/* ---------- Sidebar ---------- */
+
+.md-sidebar {
+  padding-top: 0.5rem;
+}
+
+.md-nav__link {
+  border-radius: 6px;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.md-nav__link:hover {
+  color: var(--md-accent-fg-color);
+}
+
+.md-nav__link--active {
+  color: var(--md-accent-fg-color) !important;
+  font-weight: 700;
+}
+
+.md-nav__title {
+  font-weight: 700;
+}
+
+/* ---------- Search ---------- */
+
+.md-search__form {
+  border-radius: 8px;
+}
+
+.md-search-result__link:hover {
+  background: rgba(0, 155, 119, 0.06);
+}
+
+/* ---------- Code Blocks ---------- */
+
+.md-typeset .highlight {
+  border: 1px solid var(--matching-border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.md-typeset pre {
+  border-radius: 8px;
+}
+
+.md-typeset code {
+  font-variant-ligatures: none;
+}
+
+.md-typeset :not(pre) > code {
+  border-radius: 4px;
+  padding: 0.12em 0.35em;
+}
+
+/* ---------- Tables ---------- */
+
+.md-typeset table:not([class]) {
+  border: 1px solid var(--matching-border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+  background: var(--matching-dark-green);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.md-typeset table:not([class]) tr:hover {
+  background: rgba(0, 155, 119, 0.05);
+}
+
+/* ---------- Admonitions ---------- */
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+/* ---------- Buttons ---------- */
+
+.md-typeset .md-button {
+  border-radius: 7px;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.md-typeset .md-button--primary {
+  background: var(--matching-green);
+  border-color: var(--matching-green);
+  color: #ffffff;
+}
+
+.md-typeset .md-button--primary:hover {
+  background: var(--matching-dark-green);
+  border-color: var(--matching-dark-green);
+  color: #ffffff;
+}
+
+/* ---------- Cards ---------- */
+
+.md-typeset .grid.cards > ul > li {
+  background: var(--matching-card-bg);
+  border: 1px solid var(--matching-border);
+  border-radius: 12px;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--matching-green);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 60, 45, 0.07);
+}
+
+/* ---------- Links ---------- */
+
+.md-typeset a:not(.md-button) {
+  text-underline-offset: 3px;
+}
+
+/* ---------- PlantUML viewer ---------- */
+
+.uml-viewer {
+  direction: ltr;
+  margin: 1.5rem 0;
+  overflow: hidden;
+  border: 1px solid var(--matching-border);
+  border-radius: 10px;
+  background: var(--matching-card-bg);
+  box-shadow: 0 4px 16px rgba(0, 60, 45, 0.06);
+}
+
+.uml-viewer__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.6rem;
+  padding: 0.35rem 0.5rem;
+  direction: rtl;
+  border-bottom: 1px solid var(--matching-border);
+  background: color-mix(in srgb, var(--matching-card-bg) 92%, var(--matching-green));
+}
+
+.uml-viewer__button {
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--matching-border);
+  border-radius: 6px;
+  color: var(--md-default-fg-color);
+  background: var(--matching-card-bg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.uml-viewer__button:hover,
+.uml-viewer__button:focus-visible {
+  border-color: var(--matching-green);
+  background: color-mix(in srgb, var(--matching-card-bg) 82%, var(--matching-green));
+  outline: none;
+}
+
+.uml-viewer__button--icon {
+  width: 2rem;
+  padding: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.uml-viewer__scale {
+  min-width: 3.2rem;
+  color: var(--md-default-fg-color--light);
+  font-size: 0.72rem;
+  text-align: center;
+  direction: ltr;
+}
+
+.uml-viewer__fullscreen {
+  margin-inline-start: auto;
+}
+
+.uml-viewer__viewport {
+  position: relative;
+  height: min(62vh, 42rem);
+  min-height: 16rem;
+  overflow: hidden;
+  background-color: var(--md-default-bg-color);
+  background-image: radial-gradient(var(--matching-border) 0.7px, transparent 0.7px);
+  background-size: 16px 16px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.uml-viewer__viewport:active {
+  cursor: grabbing;
+}
+
+.uml-viewer__viewport img.uml {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  max-width: none;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.uml-viewer:fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.uml-viewer:fullscreen .uml-viewer__viewport {
+  flex: 1;
+  height: auto;
+  max-height: none;
+}
+
+@media (max-width: 600px) {
+  .uml-viewer__toolbar {
+    flex-wrap: wrap;
+  }
+
+  .uml-viewer__viewport {
+    height: 55vh;
+    min-height: 13rem;
+  }
+
+  .uml-viewer__button {
+    padding-inline: 0.5rem;
+  }
+}
+
+.md-typeset a:not(.md-button):hover {
+  color: var(--md-accent-fg-color);
+}
+
+/* ---------- Footer ---------- */
+
+.md-footer {
+  background: #203c34;
+}
+
+.md-footer-meta {
+  background: #172e27;
+}
+
+/* ---------- Responsive ---------- */
+
+@media screen and (max-width: 76.234375em) {
+  .md-typeset {
+    font-size: 0.8rem;
+  }
+
+  .md-main__inner {
+    margin-top: 0.75rem;
+  }
+}
+
+@media screen and (max-width: 44.984375em) {
+  .md-typeset h1 {
+    font-size: 1.65rem;
+  }
+
+  .md-typeset h2 {
+    font-size: 1.3rem;
+  }
+
+  .md-content__inner {
+    padding-top: 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-typeset .grid.cards > ul > li,
+  .md-typeset .md-button,
+  .md-nav__link {
+    transition: none;
+  }
+
+  .md-typeset .grid.cards > ul > li:hover {
+    transform: none;
+  }
+}
