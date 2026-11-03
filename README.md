@@ -60,7 +60,7 @@ $ pnpm run test:cov
 
 ## Deployment
  
- ### Documtion
+ ### Documation 
 
 ```bash
 $ pnpm  run up
