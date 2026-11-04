@@ -4,8 +4,14 @@ import { validateEnvironment } from './config.validation.ts';
 
 describe('application configuration', () => {
   beforeEach(() => {
+    vi.stubEnv('MYSQL_HOST', 'localhost');
+    vi.stubEnv('MYSQL_PORT', '3306');
+    vi.stubEnv('MYSQL_DATABASE', 'whatsapp');
+    vi.stubEnv('MYSQL_USER', 'test_user');
+    vi.stubEnv('MYSQL_PASSWORD', 'test_password');
     for (const key of [
       'NODE_ENV',
+      'DATABASE_URL',
       'APP_NAME',
       'APP_PORT',
       'PORT',
@@ -13,12 +19,76 @@ describe('application configuration', () => {
       'BACKEND_DOMAIN',
       'APP_CORS_ORIGINS',
       'API_PREFIX',
+      'REDIS_HOST',
+      'REDIS_PORT',
+      'REDIS_PASSWORD',
+      'REDIS_DB',
+      'REDIS_CONNECT_TIMEOUT_MS',
+      'REDIS_CONNECTION_ATTEMPTS',
+      'REDIS_RETRY_DELAY_MS',
+      'REDIS_MAX_RETRY_DELAY_MS',
     ]) {
       vi.stubEnv(key, undefined);
     }
   });
 
   afterEach(() => vi.unstubAllEnvs());
+
+  it('provides Redis defaults and resolves numeric environment settings', () => {
+    expect(configuer().redis).toEqual({
+      host: '127.0.0.1',
+      port: 6379,
+      password: undefined,
+      db: 0,
+      connectTimeoutMs: 5000,
+      connectionAttempts: 5,
+      retryDelayMs: 1000,
+      maxRetryDelayMs: 30000,
+    });
+    vi.stubEnv('REDIS_HOST', 'redis');
+    vi.stubEnv('REDIS_PORT', '6380');
+    vi.stubEnv('REDIS_DB', '2');
+    vi.stubEnv('REDIS_PASSWORD', 'test-password');
+    vi.stubEnv('REDIS_CONNECT_TIMEOUT_MS', '2000');
+    vi.stubEnv('REDIS_CONNECTION_ATTEMPTS', '3');
+    vi.stubEnv('REDIS_RETRY_DELAY_MS', '100');
+    vi.stubEnv('REDIS_MAX_RETRY_DELAY_MS', '500');
+    expect(configuer().redis).toEqual({
+      host: 'redis',
+      port: 6380,
+      password: 'test-password',
+      db: 2,
+      connectTimeoutMs: 2000,
+      connectionAttempts: 3,
+      retryDelayMs: 100,
+      maxRetryDelayMs: 500,
+    });
+  });
+
+  it.each([
+    ['REDIS_PORT', '0'],
+    ['REDIS_PORT', '65536'],
+    ['REDIS_PORT', '6379abc'],
+    ['REDIS_DB', '-1'],
+    ['REDIS_DB', '16'],
+    ['REDIS_DB', '1.5'],
+    ['REDIS_CONNECT_TIMEOUT_MS', '0'],
+    ['REDIS_CONNECTION_ATTEMPTS', '0'],
+    ['REDIS_CONNECTION_ATTEMPTS', '101'],
+    ['REDIS_RETRY_DELAY_MS', ''],
+    ['REDIS_MAX_RETRY_DELAY_MS', '2147483648'],
+  ])('rejects invalid Redis configuration %s=%s', (key, value) => {
+    expect(() => validateEnvironment({ [key]: value })).toThrow(key);
+  });
+
+  it('resolves a MySQL URL and rejects unsupported database protocols', () => {
+    expect(configuer().databaseUrl).toBe(
+      'mysql://test_user:test_password@localhost:3306/whatsapp',
+    );
+    expect(() =>
+      validateEnvironment({ DATABASE_URL: 'postgresql://localhost/wa' }),
+    ).toThrow('DATABASE_URL');
+  });
 
   it('provides defaults when environment variables are absent', () => {
     expect(configuer()).toMatchObject({
@@ -58,6 +128,19 @@ describe('application configuration', () => {
     (port) => {
       expect(() => validateEnvironment({ APP_PORT: port })).toThrow('APP_PORT');
       expect(() => validateEnvironment({ PORT: port })).toThrow('PORT');
+    },
+  );
+
+  it.each(['3306', ' 3306 ', 3306])('normalizes MySQL port %j', (port) => {
+    expect(validateEnvironment({ MYSQL_PORT: port }).MYSQL_PORT).toBe(3306);
+  });
+
+  it.each(['3306abc', '1.5', '-1', '0', '65536', '', ' ', null])(
+    'rejects invalid MySQL port %j',
+    (port) => {
+      expect(() => validateEnvironment({ MYSQL_PORT: port })).toThrow(
+        'MYSQL_PORT',
+      );
     },
   );
 

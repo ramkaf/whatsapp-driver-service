@@ -7,8 +7,15 @@ export function validateEnvironment(
   const variables = Object.assign(new EnvironmentVariablesValidator(), env);
 
   for (const key of [
-    'APP_PORT', 
-    'PORT', 
+    'APP_PORT',
+    'PORT',
+    'MYSQL_PORT',
+    'REDIS_PORT',
+    'REDIS_DB',
+    'REDIS_CONNECT_TIMEOUT_MS',
+    'REDIS_CONNECTION_ATTEMPTS',
+    'REDIS_RETRY_DELAY_MS',
+    'REDIS_MAX_RETRY_DELAY_MS',
   ] as const) {
     if (env[key] !== undefined) {
       const value = env[key];

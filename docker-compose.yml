@@ -1,4 +1,3 @@
-
 services:
   docs:
     container_name: mkdocs-docs
@@ -6,8 +5,53 @@ services:
       context: .
       dockerfile: docker/DockerfileDocs
     ports:
-      - "4009:8080"
+      - '4009:8080'
     volumes:
       - ./docs:/app/docs
       - ./mkdocs.yml:/app/mkdocs.yml
     restart: unless-stopped
+  mysql:
+    image: docker.afralab.ir/library/mysql:8.4
+    container_name: whatsapp-mysql
+    restart: unless-stopped
+
+    ports:
+      - '${MYSQL_HOST}:${MYSQL_PORT}:3306'
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  redis:
+    image: docker.afralab.ir/library/redis:7
+    container_name: whatsapp-redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_HOST:-127.0.0.1}:${REDIS_PORT:-6379}:6379'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command:
+      - /bin/sh
+      - -ec
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  mysql_data:
+  redis_data:

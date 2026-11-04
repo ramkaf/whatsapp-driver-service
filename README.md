@@ -9,7 +9,81 @@ pnpm install --frozen-lockfile
 pnpm run prepare
 ```
 
-## Application configuration
+## Prisma / MySQL
+
+Prisma lives in `libs/prisma`: `schema.prisma`, migrations, and the NestJS
+`PrismaModule` / `PrismaService` (imported as `@libs/prisma`). Prisma 7 uses
+the MariaDB driver adapter for MySQL. Both the CLI and Nest service read
+`DATABASE_URL` through the shared configuration resolver in `libs/common`;
+Nest receives it through the existing `configuer` injection token.
+
+Set `DATABASE_URL` in `.env`, using `.env.example` as a template:
+
+```dotenv
+DATABASE_URL=mysql://wa_user:change_me@localhost:3306/whatsapp
+```
+
+Then generate the client and apply the checked-in migration:
+
+```bash
+pnpm run prisma:generate
+pnpm run prisma:deploy
+```
+
+For future schema changes use `pnpm run prisma:migrate --name <change_name>`.
+Build regenerates the client automatically. The generated client is ignored by Git.
+The app requires a reachable database at startup and disconnects during shutdown.
+`prisma:deploy` is explicit; starting the app does not modify the database schema.
+
+The schema defines `wa_sessions`, `wa_auth_creds`, `wa_auth_keys`, and
+`wa_session_events`. IDs default to CUID strings within VARCHAR(30). Database
+columns use snake_case; Prisma fields use camelCase. Phone is nullable before
+pairing and unique when present; application code must normalize/validate E.164.
+Connection timestamps, error details, instance ownership and event metadata are
+nullable until available. Credentials are unique per session, and Signal keys
+are unique by `(sessionId, type, keyId)`. Deleting a session cascades to its
+credentials, keys and events. `updatedAt` is maintained by Prisma writes.
+Signal key type/ID comparisons are case-sensitive in the initial MySQL migration.
+Baileys buffer serialization and auth-state persistence are separate from these models.
+Pairing codes, locks, timers and sockets are not persisted in these tables.
+
+Inject `PrismaService` into providers of a module importing `PrismaModule`.
+For example: `prisma.waSession.findMany()` or `prisma.waAuthKey.upsert(...)`.
+
+## Environment configuration
+
+Redis is provided by `libs/common/src/redis`. Import `RedisModule` in a module
+and inject `RedisService`; use `redisService.client` for Redis commands.
+`AppModule` already imports it. Start the Redis container with:
+
+```bash
+docker compose up -d redis
+```
+
+The container uses `docker.afralab.ir/library/redis:7`, password authentication,
+AOF persistence in `redis_data`, and a PING healthcheck. The app running on the
+host uses the following `.env` settings (a random password is set in local `.env`):
+
+```dotenv
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=replace_with_a_strong_password
+REDIS_DB=0
+REDIS_CONNECT_TIMEOUT_MS=5000
+REDIS_CONNECTION_ATTEMPTS=5
+REDIS_RETRY_DELAY_MS=1000
+REDIS_MAX_RETRY_DELAY_MS=30000
+```
+
+Settings are validated and exposed through `IAppConfig.redis` / `IRedisConfig`.
+Startup waits for a ready Redis connection, makes at most five attempts by
+default, and fails if they are exhausted. Delays use full jitter between zero
+and `min(maxRetryDelayMs, retryDelayMs * 2 ** (failedAttempt - 1))`.
+Connection loss during runtime also triggers bounded reconnection with jitter;
+after exhaustion commands fail until the service is restarted or explicitly
+reconnected. Commands are not queued while disconnected. Shutdown sends QUIT
+when ready and closes the client. Connection errors, readiness, reconnection,
+retry exhaustion, and shutdown are logged without the password.
 
 Copy `.env.example` to `.env` and adjust the values for your environment.
 Configuration is registered under `app` in `libs/common/src/config/index.ts`.
