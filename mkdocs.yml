@@ -109,6 +109,8 @@ nav:
 
   - Backend:
       - Home: backend/index.md 
+      - Boilerplate: backend/boilerplate.md
+      - Libs: backend/libs.md
 
   - Management:
       - Home: management/index.md 
