@@ -1,0 +1,96 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "./src/generated"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum WaSessionStatus {
+  DISCONNECTED
+  CONNECTING
+  AWAITING_PAIRING
+  CONNECTED
+  LOGGED_OUT
+  RECONNECTING
+  FAILED
+  EXPIRED
+}
+
+enum WaSessionEventType {
+  SESSION_CREATED
+  CONNECTION_STARTED
+  CONNECTION_OPENED
+  CONNECTION_CLOSED
+  CONNECTION_REPLACED
+  PAIRING_CODE_REQUESTED
+  PAIRING_COMPLETED
+  PAIRING_EXPIRED
+  RECONNECT_SCHEDULED
+  AUTH_UPDATED
+  ERROR
+}
+
+model WaSession {
+  id                 String           @id @default(cuid()) @db.VarChar(30)
+  name               String           @db.VarChar(100)
+  phone              String?          @unique @db.VarChar(20)
+  status             WaSessionStatus  @default(DISCONNECTED)
+  retryCount         Int              @default(0) @map("retry_count")
+  lastConnectedAt    DateTime?        @map("last_connected_at") @db.DateTime(3)
+  lastDisconnectedAt DateTime?        @map("last_disconnected_at") @db.DateTime(3)
+  lastDisconnectCode Int?             @map("last_disconnect_code")
+  lastError          String?          @map("last_error") @db.Text
+  instanceId         String?          @map("instance_id") @db.VarChar(100)
+  lastHeartbeatAt    DateTime?        @map("last_heartbeat_at") @db.DateTime(3)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  authCreds          WaAuthCreds?
+  authKeys           WaAuthKey[]
+  events             WaSessionEvent[]
+
+  @@index([status, lastHeartbeatAt])
+  @@index([instanceId])
+  @@map("wa_sessions")
+}
+
+model WaAuthCreds {
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  sessionId String    @unique @map("session_id") @db.VarChar(30)
+  creds     Json
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  session   WaSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("wa_auth_creds")
+}
+
+model WaAuthKey {
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  sessionId String    @map("session_id") @db.VarChar(30)
+  type      String    @db.VarChar(100)
+  keyId     String    @map("key_id") @db.VarChar(255)
+  value     Json
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  session   WaSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, type, keyId])
+  @@map("wa_auth_keys")
+}
+
+model WaSessionEvent {
+  id         String             @id @default(cuid()) @db.VarChar(30)
+  sessionId  String             @map("session_id") @db.VarChar(30)
+  event      WaSessionEventType
+  statusCode Int?               @map("status_code")
+  message    String?            @db.Text
+  metadata   Json?
+  createdAt  DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  session    WaSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("wa_session_events")
+}

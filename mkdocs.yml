@@ -1,0 +1,118 @@
+
+site_name: Financial workflow 
+site_description: Financial Microservice - Technical and Management Documentation
+site_author: Sajad Mohammadi Nejad
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: fa
+
+  font:
+    text: Roboto
+    code: Roboto Mono
+
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: حالت تاریک
+
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/white-balance-sunny
+        name: حالت روشن
+
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.path
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+
+  icon:
+    logo: material/book-open-page-variant
+    repo: fontawesome/brands/github
+
+extra_css:
+  - https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css
+  - assets/stylesheets/extra.css
+
+extra_javascript:
+  - path: assets/javascripts/mermaid-init.js
+    type: module
+  - assets/javascripts/uml-zoom.js
+
+extra:
+  generator: false
+  social: []
+
+plugins:
+  - search:
+      lang: en
+
+validation:
+  links:
+    not_found: warn
+    unrecognized_links: warn
+    absolute_links: warn
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+
+  - toc:
+      permalink: true
+
+  - pymdownx.highlight:
+      anchor_linenums: true
+
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_div_format
+
+  - pymdownx.tabbed:
+      alternate_style: true
+
+  - pymdownx.details
+
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+  # PlantUML diagrams
+  - plantuml_markdown:
+      server: https://www.plantuml.com/plantuml
+      format: svg
+nav:
+  - Frontend:
+      - Home: frontend/index.md
+
+  - Backend:
+      - Home: backend/index.md 
+      - Boilerplate: backend/boilerplate.md
+      - Libs: backend/libs.md
+
+  - Management:
+      - Home: management/index.md 
+
+copyright: Copyright &copy; 2026 Gateway
