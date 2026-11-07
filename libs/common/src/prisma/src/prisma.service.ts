@@ -6,6 +6,7 @@ import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 import { PrismaClient } from './generated/client.ts';
 
+// دسترسی به دیتابیس و چرخهٔ اتصال، تلاش مجدد اولیه و قطع اتصال Prisma را مدیریت می‌کند.
 @Injectable()
 export class PrismaService
   extends PrismaClient

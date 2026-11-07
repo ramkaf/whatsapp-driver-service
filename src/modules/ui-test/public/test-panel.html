@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>تست اتصال واتساپ</title>
+  <style>
+    body {
+      font: 15px sans-serif;
+      margin: 20px;
+      background: #f6f6f6;
+      color: #222;
+    }
+    header,
+    section {
+      background: white;
+      padding: 16px;
+      margin-bottom: 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+    header {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    input,
+    select,
+    button {
+      font: inherit;
+      padding: 8px;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      cursor: pointer;
+    }
+    button:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
+    #pairingCode {
+      font: bold 28px monospace;
+      letter-spacing: 3px;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 310px 1fr;
+      gap: 12px;
+    }
+    pre {
+      direction: ltr;
+      text-align: left;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+    }
+    #events {
+      max-height: 65vh;
+      overflow: auto;
+    }
+    #events pre {
+      border-bottom: 1px solid #ddd;
+      padding: 10px;
+    }
+    #error {
+      color: #b00020;
+    }
+    #transport,
+    #whatsapp {
+      background: #b91c1c;
+      color: white;
+      border: 0;
+      border-radius: 6px;
+      cursor: default;
+      opacity: 1;
+    }
+    #transport.connected,
+    #whatsapp.connected {
+      background: #15803d;
+      animation: socket-pulse 1.2s ease-in-out infinite;
+    }
+    #whatsapp.unknown {
+      background: #6b7280;
+    }
+    #whatsapp.connecting {
+      background: #a16207;
+    }
+    @keyframes socket-pulse {
+      50% {
+        background: #22a653;
+        box-shadow: 0 0 0 5px #15803d25;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #transport.connected,
+      #whatsapp.connected {
+        animation: none;
+      }
+    }
+    img {
+      max-width: 100%;
+    }
+    @media (max-width: 700px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+  <header>
+    <input
+      id="token"
+      type="password"
+      placeholder="WA_ADMIN_API_KEY"
+      autocomplete="off"
+      aria-label="کلید مدیریت"
+    />
+    <button id="load">بارگیری شماره‌ها</button>
+    <select id="sessions" aria-label="انتخاب شماره">
+      <option value="">شماره را انتخاب کنید</option>
+    </select>
+    <button id="reconnect">اتصال مجدد</button
+    ><button id="disconnect">قطع اتصال</button>
+  </header>
+  <section>
+    <input
+      id="phone"
+      placeholder="989121234567"
+      dir="ltr"
+      maxlength="30"
+      autocomplete="tel"
+      aria-label="شماره بین‌المللی"
+    />
+    <select id="method" aria-label="روش اتصال">
+      <option value="QR">اسکن QR</option>
+      <option value="CODE">کد اتصال</option>
+    </select>
+    <button id="create">ساخت سشن جدید</button>
+    <button
+      id="transport"
+      type="button"
+      aria-disabled="true"
+      role="status"
+      aria-live="polite"
+    >
+      سوکت قطع است
+    </button>
+    <button
+      id="whatsapp"
+      class="unknown"
+      type="button"
+      aria-disabled="true"
+      role="status"
+      aria-live="polite"
+    >
+      واتساپ: شماره‌ای انتخاب نشده
+    </button>
+    <p id="error" role="alert"></p>
+  </section>
+  <main>
+    <section>
+      <h3>اتصال و وضعیت سشن</h3>
+      <p>شمارهٔ حساب متصل: <b id="accountPhone" dir="ltr">—</b></p>
+      <p id="connectionDetail" aria-live="polite"></p>
+      <p id="qrHint">یک شماره انتخاب کنید.</p>
+      <img id="qr" hidden alt="QR اتصال واتساپ" />
+      <div id="codeBox" hidden>
+        <p>
+          واتساپ ← دستگاه‌های متصل ← اتصال دستگاه ← اتصال با شماره تلفن؛ کد ۸
+          کاراکتری را وارد کنید.
+        </p>
+        <p id="pairingCode" dir="ltr" aria-live="polite">—</p>
+      </div>
+      <p id="pairingExpiry" aria-live="polite"></p>
+      <pre id="status"></pre>
+      <button id="renew">دریافت / تمدید QR</button>
+    </section>
+    <section>
+      <button id="clear">پاک‌کردن نمایش</button
+      ><span> رویدادهای زنده — آخرین ۲۰۰ رویداد</span>
+      <div id="events"></div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const base = location.pathname.replace(/\/test-panel\/?$/, '');
+    let selected = '',
+      socket,
+      timer,
+      generation = 0,
+      retryTimer;
+    let rowsById = new Map(),
+      pairingBusy = false,
+      codeExpiry = 0,
+      qrExpiry = 0;
+    function clearPairing() {
+      codeExpiry = 0;
+      qrExpiry = 0;
+      $('pairingCode').textContent = '—';
+      $('pairingExpiry').textContent = '';
+      $('qr').hidden = true;
+      $('qr').removeAttribute('src');
+    }
+    function updatePairingControls() {
+      const code = $('method').value === 'CODE';
+      $('codeBox').hidden = !code || whatsappConnected;
+      if (code) $('qr').hidden = true;
+      $('renew').textContent = code
+        ? 'دریافت / تمدید کد اتصال'
+        : 'دریافت / تمدید QR';
+      $('renew').disabled = pairingBusy || !selected || whatsappConnected;
+      $('create').disabled = pairingBusy;
+      $('method').disabled = pairingBusy;
+      $('load').disabled = pairingBusy;
+      $('phone').disabled = pairingBusy;
+      $('sessions').disabled = pairingBusy;
+      for (const id of ['reconnect', 'disconnect'])
+        $(id).disabled = pairingBusy || !selected;
+    }
+    function phoneInput(required) {
+      const value = $('phone')
+        .value.trim()
+        .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 1776))
+        .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 1632));
+      if (!value) {
+        if (required)
+          throw new Error(
+            'برای اتصال با کد، شماره همراه با کد کشور لازم است؛ مثلاً 989121234567.',
+          );
+        return undefined;
+      }
+      if (!/^\+?[\d\s().-]+$/.test(value))
+        throw new Error('شماره فقط باید شامل ارقام و کد کشور باشد.');
+      const number = value.replace(/[\s().-]/g, '').replace(/^\+/, '');
+      if (!/^[1-9]\d{5,14}$/.test(number))
+        throw new Error(
+          'شمارهٔ بین‌المللی معتبر با کد کشور وارد کنید؛ مثلاً 989121234567.',
+        );
+      return number;
+    }
+    async function api(path, body) {
+      if ($('token').value.length < 32)
+        throw new Error('کلید مدیریت باید حداقل ۳۲ کاراکتر باشد.');
+      const response = await fetch(base + path, {
+        method: body === undefined ? 'GET' : 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: 'Bearer ' + $('token').value,
+          'Content-Type': 'application/json',
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(
+          Array.isArray(data.message)
+            ? data.message.join(', ')
+            : data.message || response.status,
+        );
+      return data;
+    }
+    function log(data) {
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(data, null, 2);
+      $('events').prepend(pre);
+      while ($('events').children.length > 200) $('events').lastChild.remove();
+    }
+    async function run(action) {
+      $('error').textContent = '';
+      try {
+        await action();
+      } catch (error) {
+        $('error').textContent = error.message;
+      }
+    }
+    async function load(preferred = selected) {
+      const rows = await api('/sessions');
+      rowsById = new Map(rows.map((row) => [row.id, row]));
+      $('sessions').replaceChildren(new Option('شماره را انتخاب کنید', ''));
+      for (const row of rows)
+        $('sessions').add(
+          new Option(
+            (row.phone || row.name) + ' — ' + row.runtime.status,
+            row.id,
+          ),
+        );
+      $('sessions').value = rows.some((row) => row.id === preferred)
+        ? preferred
+        : '';
+      choose();
+    }
+    function setTransport(connected, message) {
+      $('transport').classList.toggle('connected', connected);
+      $('transport').textContent = message;
+      if (!connected) setWhatsApp('unknown');
+    }
+    let whatsappConnected = false;
+    let streamTimeout;
+    function setWhatsApp(state, label) {
+      if (state === 'unknown') $('connectionDetail').textContent = '';
+      whatsappConnected = state === 'connected';
+      if (whatsappConnected) clearPairing();
+      updatePairingControls();
+      if (state !== 'connected') $('accountPhone').textContent = '—';
+      $('whatsapp').className = state;
+      $('whatsapp').textContent =
+        'واتساپ: ' +
+        (label ||
+          {
+            connected: 'متصل',
+            disconnected: 'قطع است',
+            connecting: 'در حال اتصال…',
+            unknown: 'وضعیت نامشخص',
+          }[state]);
+    }
+    function connectStream(version) {
+      if (!selected || version !== generation) return;
+      const url = new URL(base + '/connections/events', location.origin);
+      url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const current = (socket = new WebSocket(url));
+      current.onopen = () => {
+        if (version !== generation) return current.close();
+        streamTimeout = setTimeout(() => current.close(), 40000);
+        current.send(
+          JSON.stringify({ token: $('token').value, sessionId: selected }),
+        );
+      };
+      current.onmessage = (event) => {
+        if (version !== generation) return;
+        clearTimeout(streamTimeout);
+        streamTimeout = setTimeout(() => current.close(), 40000);
+        const data = JSON.parse(event.data);
+        if (data.sessionId !== selected) return;
+        if (data.event === 'transport.status')
+          setTransport(data.data.connected, 'سوکت زنده متصل است');
+        if (data.event === 'whatsapp.status') {
+          const state = data.data;
+          const labels = {
+            CONNECTED: 'متصل',
+            CONNECTING: 'در حال اتصال…',
+            RECONNECTING: 'در حال اتصال مجدد…',
+            AWAITING_PAIRING: 'منتظر اسکن QR یا ورود کد',
+            AUTHENTICATING: 'در حال تأیید حساب…',
+            EXPIRED: 'مهلت اتصال با QR یا کد منقضی شده',
+            LOGGED_OUT: 'از حساب خارج شده؛ اتصال دوباره لازم است',
+            FAILED: 'اتصال ناموفق',
+            DISCONNECTED: 'قطع است',
+          };
+          const reasons = {
+            SOCKET_CLOSED: 'سوکت واتساپ بسته شده است',
+            TIMEOUT_OR_CONNECTION_LOST:
+              'ارتباط از دست رفته یا زمان انتظار تمام شده است',
+            LOGGED_OUT: 'دستگاه از حساب واتساپ خارج شده است',
+            CONNECTION_REPLACED: 'اتصال با اتصال دیگری جایگزین شده است',
+            INVALID_SESSION: 'اعتبار احراز هویت سشن قابل استفاده نیست',
+            MULTIDEVICE_MISMATCH: 'اطلاعات اتصال چنددستگاهی ناسازگار است',
+            FORBIDDEN: 'واتساپ اجازهٔ اتصال نداده است',
+            SERVICE_UNAVAILABLE: 'سرویس واتساپ موقتاً در دسترس نیست',
+            RESTART_REQUIRED: 'واتساپ درخواست ساخت دوبارهٔ سوکت داده است',
+            QR_EXPIRED: 'مهلت اسکن QR تمام شده است',
+            PAIRING_CODE_EXPIRED: 'کد اتصال منقضی شده است',
+            MANUAL_DISCONNECT: 'اتصال به درخواست کاربر قطع شده است',
+            MANUAL_RESTART: 'اتصال به درخواست کاربر دوباره راه‌اندازی می‌شود',
+            CONNECTION_STUCK:
+              'راه‌اندازی اتصال بیش از مهلت تعیین‌شده طول کشیده است',
+            RETRY_LIMIT_REACHED:
+              'تعداد تلاش‌های اتصال مجدد به حد مجاز رسیده است',
+            INTERNAL_ERROR: 'خطای داخلی یا ذخیره‌سازی؛ لاگ سرور بررسی شود',
+            UNKNOWN_CLOSE: 'اتصال بسته شده؛ علت دقیق مشخص نیست',
+          };
+          setWhatsApp(
+            state.connected
+              ? 'connected'
+              : ['CONNECTING', 'RECONNECTING', 'AUTHENTICATING'].includes(
+                    state.status,
+                  )
+                ? 'connecting'
+                : 'disconnected',
+            labels[state.status] || state.status,
+          );
+          $('connectionDetail').textContent = [
+            reasons[state.reason] || state.reason,
+            state.requiresPairing ? 'نیاز به QR یا کد اتصال دارد.' : '',
+            state.lastDisconnectCode != null
+              ? 'کد آخرین قطع: ' + state.lastDisconnectCode
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' — ');
+          $('accountPhone').textContent =
+            state.connected && state.accountPhone
+              ? '+' + state.accountPhone
+              : '—';
+          $('status').textContent = JSON.stringify(state, null, 2);
+        }
+        if (data.event === 'transport.status') return;
+        log(data);
+      };
+      current.onerror = () => {
+        if (version === generation) setTransport(false, 'خطای سوکت');
+      };
+      current.onclose = (event) => {
+        if (version !== generation) return;
+        clearTimeout(streamTimeout);
+        setTransport(
+          false,
+          event.code === 1008
+            ? 'کلید مدیریت نامعتبر است یا سشن وجود ندارد'
+            : 'سوکت قطع شد؛ تلاش مجدد…',
+        );
+        if (event.code !== 1008)
+          retryTimer = setTimeout(() => connectStream(version), 3000);
+      };
+    }
+    function choose() {
+      generation++;
+      clearTimeout(timer);
+      clearTimeout(retryTimer);
+      clearTimeout(streamTimeout);
+      socket?.close();
+      selected = $('sessions').value;
+      const row = rowsById.get(selected);
+      if (row) {
+        $('method').value = row.pairingMethod;
+        $('phone').value = row.phone || '';
+      }
+      clearPairing();
+      $('events').replaceChildren();
+      $('status').textContent = '';
+      $('qr').hidden = true;
+      $('qr').removeAttribute('src');
+      setTransport(false, 'سوکت قطع است');
+      setWhatsApp(
+        'unknown',
+        selected ? 'در حال دریافت وضعیت…' : 'شماره‌ای انتخاب نشده',
+      );
+      $('qrHint').textContent = selected
+        ? 'در انتظار QR…'
+        : 'یک شماره انتخاب کنید.';
+      if (!selected) return;
+      connectStream(generation);
+      poll(generation);
+    }
+    async function poll(version) {
+      if (version !== generation) return;
+      try {
+        if ($('method').value !== 'QR' || whatsappConnected) return;
+        const qr = await api('/test-panel/' + selected + '/qr-image');
+        if (
+          version !== generation ||
+          $('method').value !== 'QR' ||
+          whatsappConnected
+        )
+          return;
+        qrExpiry = qr.expiresAt ? Date.parse(qr.expiresAt) : 0;
+        if (!qrExpiry) $('pairingExpiry').textContent = '';
+        $('qr').hidden = !qr.image;
+        if (qr.image) {
+          if ($('qr').src !== qr.image) $('qr').src = qr.image;
+        } else $('qr').removeAttribute('src');
+        $('qrHint').textContent = whatsappConnected
+          ? 'واتساپ متصل است؛ پیام جدید بفرستید.'
+          : qr.image
+            ? 'واتساپ ← دستگاه‌های متصل ← اتصال دستگاه'
+            : 'QR آماده نیست؛ برای سشن جدید دکمهٔ دریافت QR را بزنید.';
+      } catch (error) {
+        if (version === generation) {
+          $('error').textContent = error.message;
+          $('qr').hidden = true;
+        }
+      } finally {
+        if (version === generation)
+          timer = setTimeout(() => poll(version), 2000);
+      }
+    }
+    $('load').onclick = () => run(() => load());
+    $('sessions').onchange = choose;
+    $('create').onclick = () =>
+      run(async () => {
+        if (pairingBusy) return;
+        const method = $('method').value;
+        const phone = phoneInput(method === 'CODE');
+        pairingBusy = true;
+        updatePairingControls();
+        try {
+          const row = await api('/sessions', {
+            name: phone || 'QR ' + new Date().toLocaleTimeString(),
+            ...(phone ? { phone } : {}),
+            pairingMethod: method,
+          });
+          await load(row.id);
+          if (method === 'CODE') await requestPairing();
+        } finally {
+          pairingBusy = false;
+          updatePairingControls();
+        }
+      });
+    for (const action of ['reconnect', 'disconnect'])
+      $(action).onclick = () =>
+        run(async () => {
+          if (!selected) throw new Error('ابتدا شماره را انتخاب کنید.');
+          await api('/sessions/' + selected + '/' + action, {});
+        });
+    async function requestPairing() {
+      if (!selected) throw new Error('ابتدا سشن را انتخاب کنید.');
+      if (whatsappConnected)
+        throw new Error(
+          'این حساب متصل است و نیاز به اتصال مجدد با QR یا کد ندارد.',
+        );
+      const id = selected,
+        version = generation,
+        method = $('method').value;
+      const phone = method === 'CODE' ? phoneInput(true) : undefined;
+      clearPairing();
+      $('qrHint').textContent =
+        method === 'CODE'
+          ? 'در حال دریافت کد؛ ممکن است تا یک دقیقه طول بکشد…'
+          : 'در انتظار QR…';
+      const result = await api(
+        '/sessions/' + id + (method === 'CODE' ? '/pairing-code' : '/qr'),
+        method === 'CODE' ? { phone } : {},
+      );
+      if (
+        version !== generation ||
+        method !== $('method').value ||
+        whatsappConnected
+      )
+        return;
+      if (rowsById.has(id)) {
+        rowsById.get(id).pairingMethod = method;
+        if (phone) rowsById.get(id).phone = phone;
+      }
+      if (method === 'CODE') {
+        $('pairingCode').textContent = result.code;
+        codeExpiry = Date.parse(result.expiresAt);
+        $('qrHint').textContent =
+          'کد را در واتساپ همان شماره وارد کنید. کد را با دیگران به اشتراک نگذارید.';
+      }
+    }
+    $('renew').onclick = () =>
+      run(async () => {
+        if (pairingBusy) return;
+        pairingBusy = true;
+        updatePairingControls();
+        try {
+          await requestPairing();
+        } finally {
+          pairingBusy = false;
+          updatePairingControls();
+        }
+      });
+    $('method').onchange = () => {
+      clearPairing();
+      updatePairingControls();
+      $('qrHint').textContent =
+        'برای شروع روش انتخاب‌شده، دکمهٔ دریافت را بزنید.';
+    };
+    const expiryTimer = setInterval(() => {
+      const expires = $('method').value === 'CODE' ? codeExpiry : qrExpiry;
+      if (!expires) return;
+      const seconds = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
+      $('pairingExpiry').textContent = seconds
+        ? 'اعتبار باقی‌مانده: ' + seconds + ' ثانیه'
+        : 'منقضی شد؛ دوباره درخواست دهید.';
+      if (!seconds) {
+        $('pairingCode').textContent = '—';
+        $('qr').hidden = true;
+      }
+    }, 1000);
+    updatePairingControls();
+    $('clear').onclick = () => $('events').replaceChildren();
+    window.addEventListener('beforeunload', () => {
+      clearInterval(expiryTimer);
+      clearTimeout(streamTimeout);
+      generation++;
+      clearTimeout(timer);
+      clearTimeout(retryTimer);
+      socket?.close();
+    });
+  </script>
+</html>

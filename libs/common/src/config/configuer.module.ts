@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { configuer } from './configuer.ts';
 
+// تنظیمات محیطی برنامه را بارگذاری می‌کند و به‌صورت سراسری در اختیار ماژول‌ها قرار می‌دهد.
 @Global()
 @Module({
   imports: [

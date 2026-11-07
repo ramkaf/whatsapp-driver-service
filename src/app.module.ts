@@ -6,7 +6,9 @@ import { AuthStateModule } from './modules/auth-state/auth-state.module.js';
 import { ConnectionModule } from './modules/connection/connection.module.js';
 import { PairingModule } from './modules/pairing/pairing.module.js';
 import { MonitoringModule } from './modules/monitoring/monitoring.module.js';
+import { UiTestModule } from './modules/ui-test/ui-test.module.ts';
 
+// ماژول اصلی برنامه، ماژول‌های تنظیمات، زیرساخت و قابلیت‌های واتساپ را به هم متصل می‌کند.
 @Module({
   imports: [
     AppConfigModule,
@@ -17,6 +19,7 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module.js';
     ConnectionModule,
     PairingModule,
     MonitoringModule,
+    UiTestModule,
   ],
 })
 export class AppModule {}
