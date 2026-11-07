@@ -7,9 +7,9 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { HealthResponseDto } from '../dto/health-response.dto.ts';
-import { ApiErrorResponseDto } from '../../sessions/sessions/dto/sessions-response.dto.ts';
+import { ApiErrorResponseDto } from '../../sessions/dto/sessions-response.dto.ts';
 import { Controller, Get, UseGuards } from '@nestjs/common';
-import { SessionsService } from '../../sessions/sessions/providers/sessions.service.ts';
+import { SessionsService } from '../../sessions/providers/sessions.service.ts';
 import { AdminGuard } from '../../sessions/guards/admin.guard.ts';
 
 // API محافظت‌شدهٔ سلامت برنامه و آمار وضعیت اتصال سشن‌ها را ارائه می‌کند.

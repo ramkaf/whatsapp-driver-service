@@ -7,7 +7,7 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
-import { IsInternationalPhone } from '../../phone.ts';
+import { IsInternationalPhone } from '../phone.ts';
 
 export class CreateSessionDto {
   @ApiProperty({ example: 'WhatsApp 01', minLength: 1, maxLength: 100 })

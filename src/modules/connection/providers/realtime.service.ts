@@ -107,7 +107,12 @@ export class RealtimeService implements OnModuleDestroy {
         });
         client.once('message', async (raw) => {
           try {
-            const input = JSON.parse(raw.toString()) as {
+            const buffer = Buffer.isBuffer(raw)
+              ? raw
+              : Array.isArray(raw)
+                ? Buffer.concat(raw)
+                : Buffer.from(raw);
+            const input = JSON.parse(buffer.toString('utf8')) as {
               token?: unknown;
               sessionId?: unknown;
             };

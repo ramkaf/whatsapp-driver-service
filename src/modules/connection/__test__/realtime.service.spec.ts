@@ -4,6 +4,8 @@ import type { Server } from 'node:http';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
+import type { RawData } from 'ws';
+import type { Mock } from 'vitest';
 import type { IAppConfig } from '@libs/common';
 import { RealtimeService } from '../providers/realtime.service.ts';
 import type { ConnectionStatusSource } from '../providers/realtime.service.ts';
@@ -14,6 +16,7 @@ describe('test panel WebSocket', () => {
   let service: RealtimeService;
   let url: string;
   let source: ConnectionStatusSource;
+  let snapshot: Mock<ConnectionStatusSource['snapshot']>;
   const token = 'test-admin-key-with-at-least-32-characters';
 
   beforeEach(async () => {
@@ -22,22 +25,23 @@ describe('test panel WebSocket', () => {
       apiPrefix: 'api',
       whatsapp: { adminApiKey: token },
     } as IAppConfig);
+    snapshot = vi.fn(() => ({
+      connected: false,
+      status: 'DISCONNECTED',
+      accountPhone: null,
+      generation: 0,
+      retryCount: 0,
+      nextRetryAt: null,
+      reason: null,
+      lastDisconnectCode: null,
+      lastDisconnectedAt: null,
+      requiresPairing: false,
+    }));
     source = {
       exists: vi.fn(async (id) => {
         if (!['phone-a', 'phone-b'].includes(id)) throw new NotFoundException();
       }),
-      snapshot: vi.fn(() => ({
-        connected: false,
-        status: 'DISCONNECTED',
-        accountPhone: null,
-        generation: 0,
-        retryCount: 0,
-        nextRetryAt: null,
-        reason: null,
-        lastDisconnectCode: null,
-        lastDisconnectedAt: null,
-        requiresPairing: false,
-      })),
+      snapshot,
     };
     service.attach(http, source);
     http.listen(0, '127.0.0.1');
@@ -50,13 +54,22 @@ describe('test panel WebSocket', () => {
     await new Promise<void>((resolve) => http.close(() => resolve()));
   });
 
+  function decode(raw: RawData): string {
+    const buffer = Buffer.isBuffer(raw)
+      ? raw
+      : Array.isArray(raw)
+        ? Buffer.concat(raw)
+        : Buffer.from(raw);
+    return buffer.toString('utf8');
+  }
+
   async function subscribe(sessionId: string) {
     const client = new WebSocket(url);
     await once(client, 'open');
     const events: { event: string; sessionId: string; data?: unknown }[] = [];
     const ready = new Promise<void>((resolve) => {
-      const receive = (raw: { toString(): string }) => {
-        const event = JSON.parse(raw.toString());
+      const receive = (raw: RawData) => {
+        const event = JSON.parse(decode(raw));
         events.push(event);
         if (event.event === 'whatsapp.status') {
           client.off('message', receive);
@@ -84,7 +97,7 @@ describe('test panel WebSocket', () => {
     const a = await subscribe('phone-a');
     const b = await subscribe('phone-b');
     const bEvents: unknown[] = [];
-    b.on('message', (raw) => bEvents.push(JSON.parse(raw.toString())));
+    b.on('message', (raw) => bEvents.push(JSON.parse(decode(raw))));
     const messageA = once(a, 'message');
     const messageB = once(b, 'message');
     service.publish('phone-a', 'messages.upsert', {
@@ -119,13 +132,13 @@ describe('test panel WebSocket', () => {
     const closed = once(client, 'close');
     client.send(JSON.stringify({ token, sessionId: 'missing' }));
     expect((await closed)[0]).toBe(1008);
-    expect(source.snapshot).not.toHaveBeenCalled();
+    expect(snapshot).not.toHaveBeenCalled();
   });
 
   it('pushes a changed disconnect reason even when the main status is unchanged', async () => {
     const client = await subscribe('phone-a');
     const update = once(client, 'message');
-    vi.mocked(source.snapshot).mockReturnValue({
+    snapshot.mockReturnValue({
       ...source.snapshot('phone-a'),
       reason: CONNECTION_REASONS.MANUAL_DISCONNECT,
       lastDisconnectedAt: '2026-11-07T07:00:00.000Z',
@@ -144,7 +157,7 @@ describe('test panel WebSocket', () => {
   it('pushes changed runtime status and socket phone without an HTTP request', async () => {
     const client = await subscribe('phone-a');
     const update = once(client, 'message');
-    vi.mocked(source.snapshot).mockReturnValue({
+    snapshot.mockReturnValue({
       connected: true,
       status: 'CONNECTED',
       accountPhone: '989121234567',

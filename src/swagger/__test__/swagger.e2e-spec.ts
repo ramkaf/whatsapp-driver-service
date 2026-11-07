@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { SessionsController } from '../../modules/sessions/sessions/controllers/sessions.controller.ts';
-import { SessionsService } from '../../modules/sessions/sessions/providers/sessions.service.ts';
+import { SessionsController } from '../../modules/sessions/controllers/sessions.controller.ts';
+import { SessionsService } from '../../modules/sessions/providers/sessions.service.ts';
 import { PairingService } from '../../modules/pairing/providers/pairing.service.ts';
 import { HealthController } from '../../modules/monitoring/controllers/health.controller.ts';
 import { AdminGuard } from '../../modules/sessions/guards/admin.guard.ts';
