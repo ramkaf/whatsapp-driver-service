@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { SessionManagerService } from '../../connection/providers/session-manager.service.ts';
+import { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
 import { SessionRepository } from '../../sessions/session.repository.ts';
 import { normalizePhone } from '../../sessions/phone.ts';
 

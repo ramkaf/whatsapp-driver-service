@@ -1,45 +1,43 @@
-import { DisconnectReason } from '@whiskeysockets/baileys';
-import { ConnectionHandlerService } from '../providers/connection-handler.service.ts';
+import { ConnectionHandlerService } from '../providers/events/connection-handler.service.ts';
+import { DisconnectClassifierService } from '../providers/disconnect/disconnect-classifier.service.ts';
 
-describe('disconnect classification', () => {
-  const handler = new ConnectionHandlerService();
-  function update(code: number, message = 'Connection closed') {
-    return {
-      connection: 'close' as const,
-      lastDisconnect: {
-        date: new Date(),
-        error: Object.assign(new Error(message), {
-          output: { statusCode: code },
-        }),
-      },
-    };
-  }
+describe('ConnectionHandlerService', () => {
+  const classifier = new DisconnectClassifierService();
+  const handler = new ConnectionHandlerService(classifier);
 
-  it.each([
-    [DisconnectReason.loggedOut, 'logout', 'LOGGED_OUT'],
-    [DisconnectReason.connectionReplaced, 'replaced', 'CONNECTION_REPLACED'],
-    [DisconnectReason.badSession, 'invalid', 'INVALID_SESSION'],
-    [DisconnectReason.multideviceMismatch, 'invalid', 'MULTIDEVICE_MISMATCH'],
-    [DisconnectReason.forbidden, 'invalid', 'FORBIDDEN'],
-    [DisconnectReason.connectionClosed, 'retry', 'SOCKET_CLOSED'],
-    [DisconnectReason.connectionLost, 'retry', 'TIMEOUT_OR_CONNECTION_LOST'],
-    [DisconnectReason.restartRequired, 'restart', 'RESTART_REQUIRED'],
-    [DisconnectReason.unavailableService, 'retry', 'SERVICE_UNAVAILABLE'],
-    [999, 'retry', 'UNKNOWN_CLOSE'],
-  ] as const)(
-    'classifies code %s without guessing the underlying cause',
-    (code, action, reason) => {
-      expect(handler.classify(update(code))).toEqual({ code, action, reason });
-    },
-  );
+  afterEach(() => vi.restoreAllMocks());
 
-  it('distinguishes exhausted QR attempts from a network timeout with the same code', () => {
+  it('normalizes QR and authentication updates without classifying an open socket', () => {
+    const classify = vi.spyOn(classifier, 'classify');
     expect(
-      handler.classify(update(408, 'QR refs attempts ended')),
-    ).toMatchObject({ action: 'expired', reason: 'QR_EXPIRED' });
-    expect(handler.classify(update(408))).toMatchObject({
-      action: 'retry',
-      reason: 'TIMEOUT_OR_CONNECTION_LOST',
+      handler.process({ qr: 'qr', isNewLogin: true, connection: 'open' }),
+    ).toEqual({
+      qr: 'qr',
+      authenticating: true,
+      connection: 'open',
+      disconnect: null,
     });
+    expect(classify).not.toHaveBeenCalled();
+  });
+
+  it('classifies close events even when no disconnect error is available', () => {
+    expect(handler.process({ connection: 'close' })).toMatchObject({
+      authenticating: false,
+      disconnect: { code: null, action: 'retry', reason: 'UNKNOWN_CLOSE' },
+    });
+  });
+
+  it('passes the original error to the classifier', () => {
+    const classify = vi.spyOn(classifier, 'classify');
+    const error = Object.assign(new Error('closed'), {
+      output: { statusCode: 401 },
+    });
+    expect(
+      handler.process({
+        connection: 'close',
+        lastDisconnect: { error, date: new Date() },
+      }).disconnect,
+    ).toEqual({ code: 401, action: 'logout', reason: 'LOGGED_OUT' });
+    expect(classify).toHaveBeenCalledExactlyOnceWith(error);
   });
 });

@@ -1,3 +1,4 @@
+import type { PairingSecret } from './session-results.ts';
 import type { WASocket } from '@whiskeysockets/baileys';
 import type { WaSessionStatus, WaPairingMethod } from '@libs/prisma';
 import type { AuthContext } from '../../auth-state/context/auth-state.context.ts';
@@ -22,8 +23,8 @@ export interface SessionRuntime {
   stable: boolean;
   intentionalStop: boolean;
   pairingReady: boolean;
-  qr: { value: string; expiresAt: number } | null;
-  code: { value: string; expiresAt: number } | null;
+  qr: PairingSecret | null;
+  code: PairingSecret | null;
   lastCodeRequestAt: number;
   dispose: (() => void) | null;
 }

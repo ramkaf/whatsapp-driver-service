@@ -5,8 +5,8 @@ import type { IAppConfig } from '../libs/common/src/config/index.ts';
 import { PersistenceFilter } from './modules/sessions/filters/persistence.filter.ts';
 import { setupSwagger } from './swagger/setup-swagger.ts';
 import { Logger, ValidationPipe } from '@nestjs/common';
-import { RealtimeService } from './modules/connection/providers/realtime.service.ts';
-import { SessionManagerService } from './modules/connection/providers/session-manager.service.ts';
+import { RealtimeService } from './modules/connection/providers/realtime/realtime.service.ts';
+import { SessionManagerService } from './modules/connection/providers/session/session-manager.service.ts';
 import { SessionRepository } from './modules/sessions/session.repository.ts';
 
 async function bootstrap() {

@@ -7,8 +7,8 @@ import { WebSocket } from 'ws';
 import type { RawData } from 'ws';
 import type { Mock } from 'vitest';
 import type { IAppConfig } from '@libs/common';
-import { RealtimeService } from '../providers/realtime.service.ts';
-import type { ConnectionStatusSource } from '../providers/realtime.service.ts';
+import { RealtimeService } from '../providers/realtime/realtime.service.ts';
+import type { ConnectionStatusSource } from '../providers/realtime/realtime.service.ts';
 import { NotFoundException } from '@nestjs/common';
 
 describe('test panel WebSocket', () => {

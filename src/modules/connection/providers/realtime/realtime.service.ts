@@ -4,25 +4,11 @@ import type { Server } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
-import type { CONNECTION_REASONS } from '../interfaces/connection-status.ts';
 
-export interface ConnectionStatusSource {
-  exists(sessionId: string): Promise<void>;
-  snapshot(sessionId: string): {
-    connected: boolean;
-    status: string;
-    accountPhone: string | null;
-    generation: number;
-    retryCount: number;
-    nextRetryAt: string | null;
-    reason: CONNECTION_REASONS | null;
-    lastDisconnectCode: number | null;
-    lastDisconnectedAt: string | null;
-    requiresPairing: boolean;
-  };
-}
+import type { ConnectionStatusSource } from '../../interfaces/session-results.ts';
+export type { ConnectionStatusSource } from '../../interfaces/session-results.ts';
 
-// اشتراک WebSocket مصرف‌کنندگان را احراز هویت کرده و پیام‌ها، وضعیت سشن و heartbeat را منتشر می‌کند.
+// Authenticates WebSocket subscriptions and broadcasts session status and messages.
 @Injectable()
 export class RealtimeService implements OnModuleDestroy {
   private server?: WebSocketServer;

@@ -8,7 +8,7 @@ import { PrismaService } from '@libs/prisma';
 import { configuer, RedisService, EEnvironment } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 import { SessionRepository } from '../modules/sessions/session.repository.ts';
-import { SessionManagerService } from '../modules/connection/providers/session-manager.service.ts';
+import { SessionManagerService } from '../modules/connection/providers/session/session-manager.service.ts';
 import { PersistenceFilter } from '../modules/sessions/filters/persistence.filter.ts';
 
 const token = 'test-administration-token-with-at-least-32-characters';

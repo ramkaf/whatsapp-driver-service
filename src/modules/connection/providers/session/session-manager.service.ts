@@ -1,3 +1,9 @@
+import { DisconnectAction } from '../../interfaces/connection-update.ts';
+import type {
+  SessionPersistence,
+  SessionAuthentication,
+  SessionSocketFactory,
+} from '../../interfaces/session-dependencies.ts';
 import {
   ConflictException,
   Inject,
@@ -16,17 +22,24 @@ import type {
 } from '@whiskeysockets/baileys';
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
+import { SessionRuntimeService } from './session-runtime.service.ts';
+import { SocketLifecycleService } from '../socket/socket-lifecycle.service.ts';
+import type {
+  PairingCode,
+  PairingQr,
+  SessionSnapshot,
+} from '../../interfaces/session-results.ts';
 import type { WaSession } from '@libs/prisma';
-import { AuthStateService } from '../../auth-state/providers/auth-state.service.ts';
-import { SessionRepository } from '../../sessions/session.repository.ts';
-import { SocketFactoryService } from './socket-factory.service.ts';
-import { ConnectionHandlerService } from './connection-handler.service.ts';
-import { ConnectionSupervisorService } from './connection-supervisor.service.ts';
-import { SessionQueue } from '../session-queue.ts';
-import type { SessionRuntime } from '../interfaces/session-runtime.ts';
-import { CONNECTION_REASONS } from '../interfaces/connection-status.ts';
+import { AuthStateService } from '../../../auth-state/providers/auth-state.service.ts';
+import { SessionRepository } from '../../../sessions/session.repository.ts';
+import { SocketFactoryService } from '../socket/socket-factory.service.ts';
+import { ConnectionHandlerService } from '../events/connection-handler.service.ts';
+import { ConnectionSupervisorService } from '../recovery/connection-supervisor.service.ts';
+import { SessionQueue } from '../../session-queue.ts';
+import type { SessionRuntime } from '../../interfaces/session-runtime.ts';
+import { CONNECTION_REASONS } from '../../interfaces/connection-status.ts';
 
-// چرخهٔ عمر سشن‌ها، جفت‌سازی، سوکت‌ها، بازیابی اتصال و وضعیت جاری هر حساب را مدیریت می‌کند.
+// Orchestrates serialized session commands, pairing, and bounded connection recovery.
 @Injectable()
 export class SessionManagerService
   implements OnApplicationBootstrap, OnModuleDestroy
@@ -40,12 +53,15 @@ export class SessionManagerService
   private readonly startupAbort = new AbortController();
 
   constructor(
-    private readonly repository: SessionRepository,
-    private readonly authStore: AuthStateService,
-    private readonly factory: SocketFactoryService,
+    @Inject(SessionRepository) private readonly repository: SessionPersistence,
+    @Inject(AuthStateService) private readonly authStore: SessionAuthentication,
+    @Inject(SocketFactoryService)
+    private readonly factory: SessionSocketFactory,
     private readonly handler: ConnectionHandlerService,
     private readonly supervisor: ConnectionSupervisorService,
     @Inject(configuer.KEY) private readonly config: IAppConfig,
+    private readonly runtimeState: SessionRuntimeService,
+    private readonly lifecycle: SocketLifecycleService,
   ) {}
 
   private runtime(row: WaSession): SessionRuntime {
@@ -53,30 +69,7 @@ export class SessionManagerService
     if (!runtime) {
       if (this.runtimes.size >= this.config.whatsapp.maxSessions)
         throw new ConflictException('Session limit reached');
-      runtime = {
-        sessionId: row.id,
-        socket: null,
-        auth: null,
-        retryCount: row.retryCount,
-        reconnectTimer: null,
-        nextRetryAt: null,
-        generation: 0,
-        status: 'DISCONNECTED',
-        reason: null,
-        lastDisconnectCode: null,
-        lastDisconnectedAt: null,
-        pairingMethod: row.pairingMethod,
-        lastActivityAt: Date.now(),
-        connectedAt: null,
-        stateSince: Date.now(),
-        stable: false,
-        intentionalStop: !row.enabled,
-        pairingReady: false,
-        qr: null,
-        code: null,
-        lastCodeRequestAt: 0,
-        dispose: null,
-      };
+      runtime = this.runtimeState.create(row);
       this.runtimes.set(row.id, runtime);
     }
     return runtime;
@@ -88,64 +81,6 @@ export class SessionManagerService
       !runtime.intentionalStop &&
       runtime.generation === generation
     );
-  }
-
-  private state(
-    runtime: SessionRuntime,
-    status: SessionRuntime['status'],
-  ): void {
-    if (runtime.status !== status) runtime.stateSince = Date.now();
-    runtime.status = status;
-    if (['CONNECTED', 'AWAITING_PAIRING', 'AUTHENTICATING'].includes(status))
-      runtime.reason = null;
-    runtime.lastActivityAt = Date.now();
-  }
-
-  private recordDisconnect(
-    runtime: SessionRuntime,
-    reason: CONNECTION_REASONS,
-    code: number | null = null,
-  ): void {
-    runtime.reason = reason;
-    runtime.lastDisconnectCode = code;
-    runtime.lastDisconnectedAt = Date.now();
-  }
-
-  private cancelRetry(runtime: SessionRuntime): void {
-    if (runtime.reconnectTimer) clearTimeout(runtime.reconnectTimer);
-    runtime.reconnectTimer = null;
-    runtime.nextRetryAt = null;
-  }
-
-  private async teardown(runtime: SessionRuntime): Promise<void> {
-    this.cancelRetry(runtime);
-    runtime.generation++;
-    runtime.dispose?.();
-    runtime.dispose = null;
-    const socket = runtime.socket;
-    const auth = runtime.auth;
-    runtime.socket = null;
-    runtime.auth = null;
-    runtime.qr = null;
-    runtime.code = null;
-    runtime.pairingReady = false;
-    runtime.connectedAt = null;
-    const errors: unknown[] = [];
-    try {
-      await socket?.end(undefined);
-    } catch (error) {
-      errors.push(error);
-    }
-    try {
-      await auth?.close();
-    } catch (error) {
-      errors.push(error);
-    }
-    if (errors.length)
-      throw new AggregateError(
-        errors,
-        'Socket or authentication cleanup failed',
-      );
   }
 
   async start(id: string, manual = false): Promise<void> {
@@ -170,7 +105,7 @@ export class SessionManagerService
   private async startLocked(runtime: SessionRuntime): Promise<void> {
     if (this.stopping || runtime.intentionalStop || runtime.socket) return;
     const generation = ++runtime.generation;
-    this.state(runtime, 'CONNECTING');
+    this.runtimeState.state(runtime, 'CONNECTING');
     await this.repository.transition(
       runtime.sessionId,
       { status: 'CONNECTING' },
@@ -277,14 +212,14 @@ export class SessionManagerService
     runtime.reason = reasonCode;
     runtime.intentionalStop = true;
     try {
-      await this.teardown(runtime);
+      await this.lifecycle.teardown(runtime);
     } catch {
       this.logger.error({
         sessionId: runtime.sessionId,
         event: 'cleanup_failed',
       });
     }
-    this.state(runtime, 'FAILED');
+    this.runtimeState.state(runtime, 'FAILED');
     await this.repository.transition(
       runtime.sessionId,
       { status: 'FAILED', lastError: reason },
@@ -305,7 +240,7 @@ export class SessionManagerService
         value: event.qr,
         expiresAt: Date.now() + this.config.whatsapp.pairingTtlMs,
       };
-      this.state(runtime, 'AWAITING_PAIRING');
+      this.runtimeState.state(runtime, 'AWAITING_PAIRING');
       await this.repository.update(runtime.sessionId, {
         status: 'AWAITING_PAIRING',
       });
@@ -313,7 +248,7 @@ export class SessionManagerService
     if (event.authenticating) {
       runtime.qr = null;
       runtime.code = null;
-      this.state(runtime, 'AUTHENTICATING');
+      this.runtimeState.state(runtime, 'AUTHENTICATING');
       await runtime.auth?.flush();
       await this.repository.transition(
         runtime.sessionId,
@@ -334,12 +269,12 @@ export class SessionManagerService
       const row = await this.repository.require(runtime.sessionId);
       if (!/^\d{6,15}$/.test(phone) || (row.phone && row.phone !== phone))
         throw new Error('Paired phone does not match session');
-      this.cancelRetry(runtime);
+      this.lifecycle.cancelRetry(runtime);
       runtime.qr = null;
       runtime.code = null;
       runtime.connectedAt = Date.now();
       runtime.stable = false;
-      this.state(runtime, 'CONNECTED');
+      this.runtimeState.state(runtime, 'CONNECTED');
       await this.repository.transition(
         runtime.sessionId,
         {
@@ -354,17 +289,22 @@ export class SessionManagerService
     }
     if (event.connection === 'close') {
       const decision = event.disconnect!;
-      this.recordDisconnect(runtime, decision.reason, decision.code);
-      await this.teardown(runtime);
+      this.runtimeState.recordDisconnect(
+        runtime,
+        decision.reason,
+        decision.code,
+      );
+      await this.lifecycle.teardown(runtime);
       const status =
-        decision.action === 'logout'
+        decision.action === DisconnectAction.LOGOUT
           ? 'LOGGED_OUT'
-          : decision.action === 'invalid' || decision.action === 'replaced'
+          : decision.action === DisconnectAction.INVALID ||
+              decision.action === DisconnectAction.REPLACED
             ? 'FAILED'
-            : decision.action === 'expired'
+            : decision.action === DisconnectAction.EXPIRED
               ? 'EXPIRED'
               : 'DISCONNECTED';
-      this.state(runtime, status);
+      this.runtimeState.state(runtime, status);
       await this.repository.transition(
         runtime.sessionId,
         {
@@ -373,9 +313,9 @@ export class SessionManagerService
           lastDisconnectCode: decision.code,
           lastError: `Connection closed: ${decision.action}`,
         },
-        decision.action === 'replaced'
+        decision.action === DisconnectAction.REPLACED
           ? 'CONNECTION_REPLACED'
-          : decision.action === 'expired'
+          : decision.action === DisconnectAction.EXPIRED
             ? 'PAIRING_EXPIRED'
             : 'CONNECTION_CLOSED',
         {
@@ -392,7 +332,10 @@ export class SessionManagerService
         runtime.intentionalStop = true;
         return;
       }
-      await this.scheduleLocked(runtime, decision.action === 'restart');
+      await this.scheduleLocked(
+        runtime,
+        decision.action === DisconnectAction.RESTART,
+      );
     }
   }
 
@@ -416,7 +359,7 @@ export class SessionManagerService
     }
     runtime.retryCount++;
     runtime.nextRetryAt = Date.now() + milliseconds;
-    this.state(runtime, 'RECONNECTING');
+    this.runtimeState.state(runtime, 'RECONNECTING');
     await this.repository.transition(
       runtime.sessionId,
       {
@@ -434,7 +377,7 @@ export class SessionManagerService
       void this.queue
         .run(runtime.sessionId, async () => {
           if (!this.current(runtime, generation)) return;
-          this.cancelRetry(runtime);
+          this.lifecycle.cancelRetry(runtime);
           await this.startLocked(runtime);
         })
         .catch(() =>
@@ -456,9 +399,12 @@ export class SessionManagerService
         throw new ConflictException('Pairing is required after logout');
       const runtime = this.runtime(row);
       await this.repository.update(id, { enabled: true, retryCount: 0 });
-      this.recordDisconnect(runtime, CONNECTION_REASONS.MANUAL_RESTART);
+      this.runtimeState.recordDisconnect(
+        runtime,
+        CONNECTION_REASONS.MANUAL_RESTART,
+      );
       try {
-        await this.teardown(runtime);
+        await this.lifecycle.teardown(runtime);
       } catch {
         await this.failLocked(
           runtime,
@@ -491,14 +437,14 @@ export class SessionManagerService
         { reason: 'manual_disconnect' },
       );
       runtime.intentionalStop = true;
-      this.recordDisconnect(
+      this.runtimeState.recordDisconnect(
         runtime,
         status === 'LOGGED_OUT'
           ? CONNECTION_REASONS.LOGGED_OUT
           : CONNECTION_REASONS.MANUAL_DISCONNECT,
       );
       try {
-        await this.teardown(runtime);
+        await this.lifecycle.teardown(runtime);
       } catch {
         await this.failLocked(
           runtime,
@@ -508,7 +454,7 @@ export class SessionManagerService
           'Authentication cleanup failed; session stopped',
         );
       }
-      this.state(runtime, status);
+      this.runtimeState.state(runtime, status);
     });
   }
 
@@ -527,7 +473,7 @@ export class SessionManagerService
       }
       await this.repository.update(id, { enabled: false });
       runtime.intentionalStop = true;
-      this.cancelRetry(runtime);
+      this.lifecycle.cancelRetry(runtime);
       try {
         await runtime.socket.logout();
       } catch {
@@ -539,10 +485,13 @@ export class SessionManagerService
           'Logout was not confirmed; authentication retained',
         );
       }
-      await this.teardown(runtime);
+      await this.lifecycle.teardown(runtime);
       await this.authStore.clear(id);
-      this.recordDisconnect(runtime, CONNECTION_REASONS.LOGGED_OUT);
-      this.state(runtime, 'LOGGED_OUT');
+      this.runtimeState.recordDisconnect(
+        runtime,
+        CONNECTION_REASONS.LOGGED_OUT,
+      );
+      this.runtimeState.state(runtime, 'LOGGED_OUT');
       await this.repository.transition(
         id,
         { status: 'LOGGED_OUT', enabled: false },
@@ -557,7 +506,7 @@ export class SessionManagerService
       const runtime = this.runtime(await this.repository.require(id));
       await this.repository.update(id, { enabled: false });
       runtime.intentionalStop = true;
-      await this.teardown(runtime);
+      await this.lifecycle.teardown(runtime);
       // Local deletion only. WhatsApp unlinking is a separate explicit action.
       await this.repository.remove(id);
       this.runtimes.delete(id);
@@ -591,7 +540,7 @@ export class SessionManagerService
           ].some((code) => code === row.lastDisconnectCode))
       ) {
         // Clearing invalid authentication requires this explicit pairing action.
-        await this.teardown(runtime);
+        await this.lifecycle.teardown(runtime);
         await this.authStore.clear(id);
       }
       if (runtime.socket && runtime.status === 'AUTHENTICATING')
@@ -621,10 +570,7 @@ export class SessionManagerService
     });
   }
 
-  async requestPairingCode(
-    id: string,
-    phone: string,
-  ): Promise<{ code: string; expiresAt: string }> {
+  async requestPairingCode(id: string, phone: string): Promise<PairingCode> {
     const runtime = this.runtimes.get(id);
     if (!runtime) throw new ConflictException('Start pairing first');
     const generation = runtime.generation;
@@ -680,7 +626,7 @@ export class SessionManagerService
         value: code,
         expiresAt: Date.now() + this.config.whatsapp.pairingCodeTtlMs,
       };
-      this.state(runtime, 'AWAITING_PAIRING');
+      this.runtimeState.state(runtime, 'AWAITING_PAIRING');
       return {
         code,
         expiresAt: new Date(runtime.code.expiresAt).toISOString(),
@@ -688,88 +634,12 @@ export class SessionManagerService
     });
   }
 
-  pairing(id: string) {
-    const runtime = this.runtimes.get(id);
-    if (!runtime) return { qr: null, expiresAt: null };
-    if (runtime.qr && runtime.qr.expiresAt <= Date.now()) runtime.qr = null;
-    return {
-      qr: runtime.pairingMethod === 'QR' ? (runtime.qr?.value ?? null) : null,
-      expiresAt:
-        runtime.pairingMethod === 'QR' && runtime.qr
-          ? new Date(runtime.qr.expiresAt).toISOString()
-          : null,
-    };
+  pairing(id: string): PairingQr {
+    return this.runtimeState.pairing(this.runtimes.get(id));
   }
 
-  snapshot(id: string) {
-    const runtime = this.runtimes.get(id);
-    if (!runtime)
-      return {
-        status: 'DISCONNECTED',
-        connected: false,
-        accountPhone: null,
-        reason: null,
-        lastDisconnectCode: null,
-        lastDisconnectedAt: null,
-        requiresPairing: false,
-        retryCount: 0,
-        nextRetryAt: null,
-        generation: 0,
-        lastActivityAt: null,
-        connectedAt: null,
-        uptimeMs: 0,
-      };
-    const connected =
-      runtime.status === 'CONNECTED' && !!runtime.socket?.ws.isOpen;
-    // A missing live socket must not be reported as CONNECTED while its close
-    // event is queued or the watchdog has not run yet.
-    const lostSocket = runtime.status === 'CONNECTED' && !connected;
-    const codeExpired =
-      runtime.status === 'AWAITING_PAIRING' &&
-      runtime.pairingMethod === 'CODE' &&
-      !!runtime.code &&
-      runtime.code.expiresAt <= Date.now() &&
-      !runtime.auth?.state.creds.me?.id;
-    const status = lostSocket
-      ? 'DISCONNECTED'
-      : codeExpired
-        ? 'EXPIRED'
-        : runtime.status;
-    const reason = lostSocket
-      ? CONNECTION_REASONS.SOCKET_CLOSED
-      : codeExpired
-        ? CONNECTION_REASONS.PAIRING_CODE_EXPIRED
-        : runtime.reason;
-    // Read the live socket identity only. A LID is not a phone number.
-    const socketId = connected ? runtime.socket?.user?.id : undefined;
-    const accountPhone =
-      socketId?.match(/^(\d{6,15})(?::\d+)?@s\.whatsapp\.net$/)?.[1] ?? null;
-    return {
-      status,
-      connected,
-      accountPhone,
-      reason,
-      lastDisconnectCode: runtime.lastDisconnectCode,
-      lastDisconnectedAt: runtime.lastDisconnectedAt
-        ? new Date(runtime.lastDisconnectedAt).toISOString()
-        : null,
-      requiresPairing:
-        ['AWAITING_PAIRING', 'LOGGED_OUT', 'EXPIRED'].includes(status) ||
-        reason === CONNECTION_REASONS.INVALID_SESSION ||
-        reason === CONNECTION_REASONS.MULTIDEVICE_MISMATCH,
-      retryCount: runtime.retryCount,
-      nextRetryAt: runtime.nextRetryAt
-        ? new Date(runtime.nextRetryAt).toISOString()
-        : null,
-      generation: runtime.generation,
-      lastActivityAt: new Date(runtime.lastActivityAt).toISOString(),
-      connectedAt:
-        connected && runtime.connectedAt
-          ? new Date(runtime.connectedAt).toISOString()
-          : null,
-      uptimeMs:
-        connected && runtime.connectedAt ? Date.now() - runtime.connectedAt : 0,
-    };
+  snapshot(id: string): SessionSnapshot {
+    return this.runtimeState.snapshot(this.runtimes.get(id));
   }
 
   async inspectConnections(): Promise<void> {
@@ -803,13 +673,13 @@ export class SessionManagerService
           now - runtime.stateSince < this.config.whatsapp.connectionStuckMs
         )
           return;
-        this.recordDisconnect(
+        this.runtimeState.recordDisconnect(
           runtime,
           runtime.status === 'CONNECTED'
             ? CONNECTION_REASONS.SOCKET_CLOSED
             : CONNECTION_REASONS.CONNECTION_STUCK,
         );
-        await this.teardown(runtime);
+        await this.lifecycle.teardown(runtime);
         await this.scheduleLocked(runtime);
       });
     }
@@ -875,7 +745,7 @@ export class SessionManagerService
     this.startupAbort.abort();
     for (const runtime of this.runtimes.values()) {
       runtime.intentionalStop = true;
-      this.cancelRetry(runtime);
+      this.lifecycle.cancelRetry(runtime);
     }
     await Promise.allSettled(
       [...this.runtimes.values()].map(async (runtime) => {
@@ -887,7 +757,7 @@ export class SessionManagerService
     await Promise.all(
       [...this.runtimes.values()].map(async (runtime) => {
         try {
-          await this.teardown(runtime);
+          await this.lifecycle.teardown(runtime);
         } catch {
           this.logger.error({
             sessionId: runtime.sessionId,

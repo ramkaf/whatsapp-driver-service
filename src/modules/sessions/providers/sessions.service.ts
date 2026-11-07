@@ -2,7 +2,7 @@ import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common';
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 import { SessionRepository } from '../session.repository.ts';
-import { SessionManagerService } from '../../connection/providers/session-manager.service.ts';
+import { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
 import { SessionQueue } from '../../connection/session-queue.ts';
 import type { CreateSessionDto } from '../dto/sessions.dto.ts';
 import { normalizePhone } from '../phone.ts';
@@ -12,7 +12,7 @@ import { normalizePhone } from '../phone.ts';
 export class SessionsService {
   private readonly creation = new SessionQueue();
   private readonly logger = new Logger(SessionsService.name);
-  
+
   constructor(
     private readonly repository: SessionRepository,
     private readonly manager: SessionManagerService,

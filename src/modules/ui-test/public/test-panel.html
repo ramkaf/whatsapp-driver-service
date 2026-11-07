@@ -1,581 +1,2101 @@
 <!doctype html>
 <html lang="fa" dir="rtl">
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>تست اتصال واتساپ</title>
-  <style>
-    body {
-      font: 15px sans-serif;
-      margin: 20px;
-      background: #f6f6f6;
-      color: #222;
-    }
-    header,
-    section {
-      background: white;
-      padding: 16px;
-      margin-bottom: 12px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-    }
-    header {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    input,
-    select,
-    button {
-      font: inherit;
-      padding: 8px;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-    button {
-      cursor: pointer;
-    }
-    button:disabled {
-      cursor: wait;
-      opacity: 0.6;
-    }
-    #pairingCode {
-      font: bold 28px monospace;
-      letter-spacing: 3px;
-    }
-    main {
-      display: grid;
-      grid-template-columns: 310px 1fr;
-      gap: 12px;
-    }
-    pre {
-      direction: ltr;
-      text-align: left;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      font-size: 12px;
-    }
-    #events {
-      max-height: 65vh;
-      overflow: auto;
-    }
-    #events pre {
-      border-bottom: 1px solid #ddd;
-      padding: 10px;
-    }
-    #error {
-      color: #b00020;
-    }
-    #transport,
-    #whatsapp {
-      background: #b91c1c;
-      color: white;
-      border: 0;
-      border-radius: 6px;
-      cursor: default;
-      opacity: 1;
-    }
-    #transport.connected,
-    #whatsapp.connected {
-      background: #15803d;
-      animation: socket-pulse 1.2s ease-in-out infinite;
-    }
-    #whatsapp.unknown {
-      background: #6b7280;
-    }
-    #whatsapp.connecting {
-      background: #a16207;
-    }
-    @keyframes socket-pulse {
-      50% {
-        background: #22a653;
-        box-shadow: 0 0 0 5px #15803d25;
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>پنل تست اتصال واتساپ</title>
+    <style>
+      :root {
+        --page: #f2f4f7;
+        --surface: #fff;
+        --ink: #172a3a;
+        --muted: #73808e;
+        --line: #e5eaf0;
+        --green: #087f65;
+        --green-dark: #06614e;
+        --green-soft: #e8f5ef;
+        --red: #c04a55;
+        --radius: 16px;
+        font-family: Tahoma, 'Segoe UI', sans-serif;
+        color: var(--ink);
+        background: var(--page);
+        color-scheme: light;
       }
-    }
-    @media (prefers-reduced-motion: reduce) {
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.9;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button,
+      input,
+      select,
+      summary,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button {
+        cursor: pointer;
+      }
+      button,
+      input,
+      select {
+        min-height: 44px;
+        border-radius: 9px;
+      }
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 1px solid var(--line);
+        padding: 9px 15px;
+        background: white;
+        color: var(--ink);
+        font-weight: 700;
+        transition:
+          background 0.16s,
+          border-color 0.16s,
+          box-shadow 0.16s;
+      }
+      button:hover:not(:disabled) {
+        background: #f5f8fa;
+        border-color: #bac7d2;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.43;
+      }
+      button.primary {
+        background: var(--green);
+        color: white;
+        border-color: var(--green);
+        box-shadow: 0 3px 6px #087f6510;
+      }
+      button.primary:hover:not(:disabled) {
+        background: var(--green-dark);
+        border-color: var(--green-dark);
+        box-shadow: 0 4px 12px #087f6525;
+      }
+      button.danger {
+        color: var(--red);
+        background: #fff9fa;
+        border-color: #f0dfe2;
+      }
+      button.danger:hover:not(:disabled) {
+        background: #fff0f1;
+        border-color: #d9a5a6;
+      }
+      :where(button, input, select, summary, a):focus-visible {
+        outline: 3px solid #39b89b;
+        outline-offset: 3px;
+      }
+      input,
+      select {
+        width: 100%;
+        min-width: 0;
+        border: 1px solid #dfe6ed;
+        padding: 10px 12px;
+        background: #fbfcfd;
+        color: var(--ink);
+      }
+      input::placeholder {
+        color: #8b98a7;
+        opacity: 1;
+      }
+      input:focus,
+      select:focus {
+        border-color: var(--green);
+        background: white;
+      }
+      select {
+        cursor: pointer;
+      }
+      svg {
+        width: 19px;
+        height: 19px;
+        flex-shrink: 0;
+      }
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 27px;
+        line-height: 1.6;
+        letter-spacing: -0.7px;
+      }
+      h2 {
+        font-size: 14px;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .sidebar {
+        position: fixed;
+        inset-block: 0;
+        inset-inline-start: 0;
+        width: 216px;
+        background: #102333;
+        color: #90a5b5;
+        display: flex;
+        flex-direction: column;
+        z-index: 10;
+        padding: 30px 20px;
+      }
+      .side-brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        color: #edf7f7;
+        padding-bottom: 28px;
+        border-bottom: 1px solid #ffffff12;
+      }
+      .side-logo {
+        display: grid;
+        place-items: center;
+        background: #20bd95;
+        color: #082c26;
+        width: 37px;
+        height: 37px;
+        border-radius: 12px;
+      }
+      .side-brand strong {
+        font:
+          700 17px/1.4 'Segoe UI',
+          sans-serif;
+        letter-spacing: 0.4px;
+      }
+      .side-brand small {
+        display: block;
+        font-size: 10px;
+        color: #8aa2b3;
+        letter-spacing: 0.4px;
+      }
+      .nav-label {
+        font-size: 10px;
+        color: #657f93;
+        margin: 30px 12px 12px;
+      }
+      .sidebar nav {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 10px;
+        font-size: 12px;
+      }
+      .nav-item:hover {
+        background: #ffffff08;
+        color: #ecf6ff;
+      }
+      .nav-item.active {
+        color: #65e0bf;
+        background: #1cba951a;
+        border: 1px solid #44c7a924;
+      }
+      .side-bottom {
+        margin-top: auto;
+        border-top: 1px solid #ffffff12;
+        padding-top: 20px;
+        font-size: 10px;
+      }
+      .side-bottom strong {
+        display: block;
+        font-size: 11px;
+        color: #b6c8d5;
+      }
+      .side-bottom p {
+        margin-top: 5px;
+        line-height: 2.1;
+      }
+      .side-bottom .version {
+        font:
+          10px Consolas,
+          monospace;
+        color: #667e91;
+        margin-top: 14px;
+      }
+      .app {
+        max-width: 1660px;
+        margin-inline-start: 216px;
+        padding: 28px clamp(18px, 2.8vw, 44px) 20px;
+      }
+      .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 24px;
+      }
+      .breadcrumb {
+        font-size: 10px;
+        color: var(--muted);
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .breadcrumb span:last-child {
+        color: var(--ink);
+      }
+      .subtitle {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 5px;
+      }
+      .header-tag {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        background: white;
+        border: 1px solid var(--line);
+        padding: 7px 12px;
+        border-radius: 8px;
+        color: #697a89;
+        font-size: 10px;
+      }
+      .header-tag svg {
+        width: 15px;
+        height: 15px;
+        color: var(--green);
+      }
+      .hero {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 24px;
+        background: #122b3a;
+        color: #edf8f7;
+        border: 1px solid #1b3c4b;
+        border-radius: 18px;
+        padding: 25px 29px;
+        margin-bottom: 20px;
+      }
+      .hero:before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background:
+          radial-gradient(ellipse at 5% 100%, #1b927d44, transparent 55%),
+          linear-gradient(115deg, #ffffff00 60%, #ffffff02 60%);
+        pointer-events: none;
+      }
+      .eyebrow {
+        color: #74cfb5;
+        font-size: 10px;
+        letter-spacing: 0.3px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 7px;
+      }
+      .eyebrow:before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        background: #74cfb5;
+        border-radius: 50%;
+      }
+      .hero h2 {
+        font-size: 20px;
+      }
+      .hero p {
+        font-size: 11px;
+        color: #a7bdc9;
+        max-width: 560px;
+        margin-top: 7px;
+      }
+      .hero-art {
+        direction: ltr;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        flex-shrink: 0;
+        margin-inline: 12px;
+      }
+      .hero-node {
+        display: grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 13px;
+        background: #ffffff08;
+        border: 1px solid #ffffff20;
+        color: #a5c6cf;
+      }
+      .hero-node.accent {
+        background: #1c9b7730;
+        color: #71e0ba;
+        border-color: #45bd923d;
+      }
+      .hero-link {
+        width: 42px;
+        border-top: 1px dashed #548878;
+        position: relative;
+      }
+      .hero-link:after {
+        content: '';
+        position: absolute;
+        width: 5px;
+        height: 5px;
+        background: #67cfaa;
+        border-radius: 50%;
+        top: -3px;
+        left: 18px;
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 13px;
+        margin-bottom: 24px;
+      }
+      .metric {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 17px 18px;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        min-width: 0;
+      }
+      .metric-icon {
+        display: grid;
+        place-items: center;
+        width: 39px;
+        height: 39px;
+        border-radius: 11px;
+        background: #eff4f8;
+        color: #65809a;
+        flex-shrink: 0;
+      }
+      .metric:nth-child(2) .metric-icon {
+        color: #916fc0;
+        background: #f4eff9;
+      }
+      .metric:nth-child(3) .metric-icon {
+        color: #15916f;
+        background: #eaf6ef;
+      }
+      .metric:nth-child(4) .metric-icon {
+        color: #c18a29;
+        background: #fcf5e6;
+      }
+      .metric-label {
+        font-size: 10px;
+        color: var(--muted);
+        margin-bottom: 3px;
+      }
+      .metric-value {
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1.5;
+      }
+      .metric-value.compact {
+        font-size: 12px;
+      }
+      .metric-value[data-connected='true'] {
+        color: var(--green);
+      }
+      .card {
+        min-width: 0;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: 0 2px 4px #172a3a02;
+      }
+      .card-heading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .step {
+        display: grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        color: var(--green);
+        background: var(--green-soft);
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .controls {
+        padding: 20px 23px;
+        margin-bottom: 15px;
+        scroll-margin-top: 20px;
+      }
+      .toolbar {
+        display: grid;
+        grid-template-columns: minmax(180px, 1.1fr) minmax(160px, 0.9fr) auto;
+        align-items: end;
+        gap: 16px;
+        margin-top: 17px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        min-width: 0;
+      }
+      .field label {
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .input-action {
+        display: flex;
+        gap: 8px;
+        align-items: stretch;
+      }
+      .input-action input {
+        flex: 1;
+      }
+      .input-action button {
+        white-space: nowrap;
+        font-size: 11px;
+      }
+      #token {
+        direction: ltr;
+        font-family: Consolas, monospace;
+        font-size: 11px;
+      }
+      .session-actions {
+        display: flex;
+        gap: 7px;
+      }
+      .session-actions button {
+        font-size: 11px;
+      }
+      .setup {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 20px;
+        align-items: center;
+        padding: 20px 23px;
+        margin-bottom: 18px;
+      }
+      .setup-form {
+        display: grid;
+        grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.6fr) auto;
+        align-items: end;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .setup-form button {
+        font-size: 11px;
+      }
+      .setup-note {
+        color: var(--muted);
+        font-size: 10px;
+        margin-top: 9px;
+      }
+      .connection-indicators {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-inline-start: 20px;
+        border-inline-start: 1px solid var(--line);
+        max-width: 245px;
+      }
+      #transport,
+      #whatsapp {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 30px;
+        border-radius: 7px;
+        padding: 5px 10px;
+        font-size: 10px;
+        line-height: 1.8;
+        color: #a84651;
+        background: #fdf0f1;
+      }
+      #transport:before,
+      #whatsapp:before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        flex-shrink: 0;
+      }
       #transport.connected,
       #whatsapp.connected {
-        animation: none;
+        color: #087d5b;
+        background: #e9f6ef;
       }
-    }
-    img {
-      max-width: 100%;
-    }
-    @media (max-width: 700px) {
+      #whatsapp.unknown {
+        color: #758493;
+        background: #f0f3f6;
+      }
+      #whatsapp.connecting {
+        color: #957012;
+        background: #fff8e6;
+      }
+      #error {
+        color: #ad3544;
+        background: #fff1f3;
+        border: 1px solid #f1d6dc;
+        padding: 12px 18px;
+        border-radius: 10px;
+        margin-bottom: 18px;
+        overflow-wrap: anywhere;
+      }
+      #error:empty {
+        display: none;
+      }
       main {
-        grid-template-columns: 1fr;
+        display: grid;
+        grid-template-columns: 310px minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
       }
-    }
-  </style>
-  <header>
-    <input
-      id="token"
-      type="password"
-      placeholder="WA_ADMIN_API_KEY"
-      autocomplete="off"
-      aria-label="کلید مدیریت"
-    />
-    <button id="load">بارگیری شماره‌ها</button>
-    <select id="sessions" aria-label="انتخاب شماره">
-      <option value="">شماره را انتخاب کنید</option>
-    </select>
-    <button id="reconnect">اتصال مجدد</button
-    ><button id="disconnect">قطع اتصال</button>
-  </header>
-  <section>
-    <input
-      id="phone"
-      placeholder="989121234567"
-      dir="ltr"
-      maxlength="30"
-      autocomplete="tel"
-      aria-label="شماره بین‌المللی"
-    />
-    <select id="method" aria-label="روش اتصال">
-      <option value="QR">اسکن QR</option>
-      <option value="CODE">کد اتصال</option>
-    </select>
-    <button id="create">ساخت سشن جدید</button>
-    <button
-      id="transport"
-      type="button"
-      aria-disabled="true"
-      role="status"
-      aria-live="polite"
-    >
-      سوکت قطع است
-    </button>
-    <button
-      id="whatsapp"
-      class="unknown"
-      type="button"
-      aria-disabled="true"
-      role="status"
-      aria-live="polite"
-    >
-      واتساپ: شماره‌ای انتخاب نشده
-    </button>
-    <p id="error" role="alert"></p>
-  </section>
-  <main>
-    <section>
-      <h3>اتصال و وضعیت سشن</h3>
-      <p>شمارهٔ حساب متصل: <b id="accountPhone" dir="ltr">—</b></p>
-      <p id="connectionDetail" aria-live="polite"></p>
-      <p id="qrHint">یک شماره انتخاب کنید.</p>
-      <img id="qr" hidden alt="QR اتصال واتساپ" />
-      <div id="codeBox" hidden>
-        <p>
-          واتساپ ← دستگاه‌های متصل ← اتصال دستگاه ← اتصال با شماره تلفن؛ کد ۸
-          کاراکتری را وارد کنید.
-        </p>
-        <p id="pairingCode" dir="ltr" aria-live="polite">—</p>
-      </div>
-      <p id="pairingExpiry" aria-live="polite"></p>
-      <pre id="status"></pre>
-      <button id="renew">دریافت / تمدید QR</button>
-    </section>
-    <section>
-      <button id="clear">پاک‌کردن نمایش</button
-      ><span> رویدادهای زنده — آخرین ۲۰۰ رویداد</span>
-      <div id="events"></div>
-    </section>
-  </main>
-  <script>
-    const $ = (id) => document.getElementById(id);
-    const base = location.pathname.replace(/\/test-panel\/?$/, '');
-    let selected = '',
-      socket,
-      timer,
-      generation = 0,
-      retryTimer;
-    let rowsById = new Map(),
-      pairingBusy = false,
-      codeExpiry = 0,
-      qrExpiry = 0;
-    function clearPairing() {
-      codeExpiry = 0;
-      qrExpiry = 0;
-      $('pairingCode').textContent = '—';
-      $('pairingExpiry').textContent = '';
-      $('qr').hidden = true;
-      $('qr').removeAttribute('src');
-    }
-    function updatePairingControls() {
-      const code = $('method').value === 'CODE';
-      $('codeBox').hidden = !code || whatsappConnected;
-      if (code) $('qr').hidden = true;
-      $('renew').textContent = code
-        ? 'دریافت / تمدید کد اتصال'
-        : 'دریافت / تمدید QR';
-      $('renew').disabled = pairingBusy || !selected || whatsappConnected;
-      $('create').disabled = pairingBusy;
-      $('method').disabled = pairingBusy;
-      $('load').disabled = pairingBusy;
-      $('phone').disabled = pairingBusy;
-      $('sessions').disabled = pairingBusy;
-      for (const id of ['reconnect', 'disconnect'])
-        $(id).disabled = pairingBusy || !selected;
-    }
-    function phoneInput(required) {
-      const value = $('phone')
-        .value.trim()
-        .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 1776))
-        .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 1632));
-      if (!value) {
-        if (required)
-          throw new Error(
-            'برای اتصال با کد، شماره همراه با کد کشور لازم است؛ مثلاً 989121234567.',
-          );
-        return undefined;
+      .pairing-card {
+        padding: 21px;
+        scroll-margin-top: 20px;
       }
-      if (!/^\+?[\d\s().-]+$/.test(value))
-        throw new Error('شماره فقط باید شامل ارقام و کد کشور باشد.');
-      const number = value.replace(/[\s().-]/g, '').replace(/^\+/, '');
-      if (!/^[1-9]\d{5,14}$/.test(number))
-        throw new Error(
-          'شمارهٔ بین‌المللی معتبر با کد کشور وارد کنید؛ مثلاً 989121234567.',
-        );
-      return number;
-    }
-    async function api(path, body) {
-      if ($('token').value.length < 32)
-        throw new Error('کلید مدیریت باید حداقل ۳۲ کاراکتر باشد.');
-      const response = await fetch(base + path, {
-        method: body === undefined ? 'GET' : 'POST',
-        cache: 'no-store',
-        headers: {
-          Authorization: 'Bearer ' + $('token').value,
-          'Content-Type': 'application/json',
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(
-          Array.isArray(data.message)
-            ? data.message.join(', ')
-            : data.message || response.status,
-        );
-      return data;
-    }
-    function log(data) {
-      const pre = document.createElement('pre');
-      pre.textContent = JSON.stringify(data, null, 2);
-      $('events').prepend(pre);
-      while ($('events').children.length > 200) $('events').lastChild.remove();
-    }
-    async function run(action) {
-      $('error').textContent = '';
-      try {
-        await action();
-      } catch (error) {
-        $('error').textContent = error.message;
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
       }
-    }
-    async function load(preferred = selected) {
-      const rows = await api('/sessions');
-      rowsById = new Map(rows.map((row) => [row.id, row]));
-      $('sessions').replaceChildren(new Option('شماره را انتخاب کنید', ''));
-      for (const row of rows)
-        $('sessions').add(
-          new Option(
-            (row.phone || row.name) + ' — ' + row.runtime.status,
-            row.id,
-          ),
-        );
-      $('sessions').value = rows.some((row) => row.id === preferred)
-        ? preferred
-        : '';
-      choose();
-    }
-    function setTransport(connected, message) {
-      $('transport').classList.toggle('connected', connected);
-      $('transport').textContent = message;
-      if (!connected) setWhatsApp('unknown');
-    }
-    let whatsappConnected = false;
-    let streamTimeout;
-    function setWhatsApp(state, label) {
-      if (state === 'unknown') $('connectionDetail').textContent = '';
-      whatsappConnected = state === 'connected';
-      if (whatsappConnected) clearPairing();
-      updatePairingControls();
-      if (state !== 'connected') $('accountPhone').textContent = '—';
-      $('whatsapp').className = state;
-      $('whatsapp').textContent =
-        'واتساپ: ' +
-        (label ||
-          {
-            connected: 'متصل',
-            disconnected: 'قطع است',
-            connecting: 'در حال اتصال…',
-            unknown: 'وضعیت نامشخص',
-          }[state]);
-    }
-    function connectStream(version) {
-      if (!selected || version !== generation) return;
-      const url = new URL(base + '/connections/events', location.origin);
-      url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const current = (socket = new WebSocket(url));
-      current.onopen = () => {
-        if (version !== generation) return current.close();
-        streamTimeout = setTimeout(() => current.close(), 40000);
-        current.send(
-          JSON.stringify({ token: $('token').value, sessionId: selected }),
-        );
-      };
-      current.onmessage = (event) => {
-        if (version !== generation) return;
-        clearTimeout(streamTimeout);
-        streamTimeout = setTimeout(() => current.close(), 40000);
-        const data = JSON.parse(event.data);
-        if (data.sessionId !== selected) return;
-        if (data.event === 'transport.status')
-          setTransport(data.data.connected, 'سوکت زنده متصل است');
-        if (data.event === 'whatsapp.status') {
-          const state = data.data;
-          const labels = {
-            CONNECTED: 'متصل',
-            CONNECTING: 'در حال اتصال…',
-            RECONNECTING: 'در حال اتصال مجدد…',
-            AWAITING_PAIRING: 'منتظر اسکن QR یا ورود کد',
-            AUTHENTICATING: 'در حال تأیید حساب…',
-            EXPIRED: 'مهلت اتصال با QR یا کد منقضی شده',
-            LOGGED_OUT: 'از حساب خارج شده؛ اتصال دوباره لازم است',
-            FAILED: 'اتصال ناموفق',
-            DISCONNECTED: 'قطع است',
-          };
-          const reasons = {
-            SOCKET_CLOSED: 'سوکت واتساپ بسته شده است',
-            TIMEOUT_OR_CONNECTION_LOST:
-              'ارتباط از دست رفته یا زمان انتظار تمام شده است',
-            LOGGED_OUT: 'دستگاه از حساب واتساپ خارج شده است',
-            CONNECTION_REPLACED: 'اتصال با اتصال دیگری جایگزین شده است',
-            INVALID_SESSION: 'اعتبار احراز هویت سشن قابل استفاده نیست',
-            MULTIDEVICE_MISMATCH: 'اطلاعات اتصال چنددستگاهی ناسازگار است',
-            FORBIDDEN: 'واتساپ اجازهٔ اتصال نداده است',
-            SERVICE_UNAVAILABLE: 'سرویس واتساپ موقتاً در دسترس نیست',
-            RESTART_REQUIRED: 'واتساپ درخواست ساخت دوبارهٔ سوکت داده است',
-            QR_EXPIRED: 'مهلت اسکن QR تمام شده است',
-            PAIRING_CODE_EXPIRED: 'کد اتصال منقضی شده است',
-            MANUAL_DISCONNECT: 'اتصال به درخواست کاربر قطع شده است',
-            MANUAL_RESTART: 'اتصال به درخواست کاربر دوباره راه‌اندازی می‌شود',
-            CONNECTION_STUCK:
-              'راه‌اندازی اتصال بیش از مهلت تعیین‌شده طول کشیده است',
-            RETRY_LIMIT_REACHED:
-              'تعداد تلاش‌های اتصال مجدد به حد مجاز رسیده است',
-            INTERNAL_ERROR: 'خطای داخلی یا ذخیره‌سازی؛ لاگ سرور بررسی شود',
-            UNKNOWN_CLOSE: 'اتصال بسته شده؛ علت دقیق مشخص نیست',
-          };
-          setWhatsApp(
-            state.connected
-              ? 'connected'
-              : ['CONNECTING', 'RECONNECTING', 'AUTHENTICATING'].includes(
-                    state.status,
-                  )
-                ? 'connecting'
-                : 'disconnected',
-            labels[state.status] || state.status,
-          );
-          $('connectionDetail').textContent = [
-            reasons[state.reason] || state.reason,
-            state.requiresPairing ? 'نیاز به QR یا کد اتصال دارد.' : '',
-            state.lastDisconnectCode != null
-              ? 'کد آخرین قطع: ' + state.lastDisconnectCode
-              : '',
-          ]
-            .filter(Boolean)
-            .join(' — ');
-          $('accountPhone').textContent =
-            state.connected && state.accountPhone
-              ? '+' + state.accountPhone
-              : '—';
-          $('status').textContent = JSON.stringify(state, null, 2);
+      .section-icon {
+        color: #8b9aaa;
+      }
+      .account {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin: 20px 0 14px;
+        padding: 11px 12px;
+        border: 1px solid #edf0f4;
+        border-radius: 9px;
+        background: #f8fafc;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      #accountPhone {
+        color: var(--ink);
+        font:
+          bold 12px Consolas,
+          monospace;
+      }
+      #connectionDetail {
+        font-size: 11px;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+        margin-bottom: 12px;
+      }
+      #connectionDetail:empty {
+        display: none;
+      }
+      .pairing-area {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 245px;
+        border: 1px dashed #cadad4;
+        background: linear-gradient(145deg, #f8fcfa, #fcfdfd);
+        border-radius: 12px;
+        padding: 21px 13px;
+        text-align: center;
+      }
+      .pairing-symbol {
+        display: grid;
+        place-items: center;
+        width: 66px;
+        height: 66px;
+        margin-bottom: 18px;
+        background: white;
+        box-shadow:
+          0 4px 16px #087f6512,
+          0 0 0 7px #edf7f2;
+        color: var(--green);
+        border: 1px solid #daece3;
+        border-radius: 16px;
+      }
+      .pairing-symbol svg {
+        width: 31px;
+        height: 31px;
+      }
+      .pairing-area:has(#qr:not([hidden])) .pairing-symbol,
+      .pairing-area:has(#codeBox:not([hidden])) .pairing-symbol {
+        display: none;
+      }
+      .connected-symbol {
+        display: none;
+        place-items: center;
+        width: 66px;
+        height: 66px;
+        margin-bottom: 18px;
+        border-radius: 50%;
+        background: #def4e8;
+        color: #087f65;
+        box-shadow: 0 0 0 8px #edf9f2;
+      }
+      .connected-symbol svg {
+        width: 32px;
+        height: 32px;
+      }
+      .pairing-connected .connected-symbol {
+        display: grid;
+      }
+      .pairing-connected .pairing-symbol {
+        display: none;
+      }
+      .pairing-connected {
+        border-style: solid;
+        border-color: #d4eadd;
+      }
+      .pairing-card:has(.pairing-connected) .pairing-help {
+        display: none;
+      }
+      #qrHint {
+        font-size: 11px;
+        line-height: 2.1;
+        color: var(--muted);
+        max-width: 235px;
+      }
+      #qr {
+        max-width: 100%;
+        width: 230px;
+        height: auto;
+        border-radius: 10px;
+        margin-top: 13px;
+        background: white;
+      }
+      #codeBox {
+        margin-top: 13px;
+        width: 100%;
+      }
+      #codeBox p:first-child {
+        color: var(--muted);
+        font-size: 10px;
+      }
+      #pairingCode {
+        margin-top: 15px;
+        padding: 10px;
+        border: 1px solid #cddfd3;
+        border-radius: 10px;
+        background: white;
+        color: var(--green-dark);
+        font:
+          bold 25px/1.6 Consolas,
+          monospace;
+        letter-spacing: 4px;
+        overflow-wrap: anywhere;
+      }
+      #pairingExpiry {
+        font-size: 10px;
+        color: var(--green);
+        margin-top: 10px;
+      }
+      #pairingExpiry:empty {
+        display: none;
+      }
+      #renew {
+        width: 100%;
+        margin-top: 15px;
+        font-size: 11px;
+      }
+      .pairing-help {
+        font-size: 10px;
+        color: var(--muted);
+        line-height: 2.1;
+        margin-top: 13px;
+        text-align: center;
+      }
+      details {
+        margin-top: 17px;
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
+      }
+      summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 11px;
+        padding: 3px 0;
+      }
+      pre {
+        direction: ltr;
+        text-align: left;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font:
+          11px/1.9 Consolas,
+          'Liberation Mono',
+          monospace;
+        tab-size: 2;
+      }
+      #status {
+        max-height: 280px;
+        overflow: auto;
+        background: #f2f5f8;
+        border-radius: 9px;
+        padding: 12px;
+        color: #486274;
+      }
+      #status:empty:before {
+        content: 'No session selected';
+        color: #7c8c99;
+      }
+      .events-card {
+        overflow: hidden;
+        scroll-margin-top: 20px;
+      }
+      .events-header {
+        padding: 18px 21px;
+        border-bottom: 1px solid var(--line);
+      }
+      .live-label {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .live-label:before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #9aa8b5;
+        box-shadow: 0 0 0 4px #f0f3f6;
+      }
+      body.stream-connected .live-label:before {
+        background: #17a87f;
+        box-shadow: 0 0 0 4px #e8f5ef;
+      }
+      #clear {
+        min-height: 32px;
+        padding: 5px 10px;
+        font-size: 10px;
+        font-weight: 400;
+      }
+      .event-tools {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 18px;
+        background: #172a39;
+        border-bottom: 1px solid #ffffff0c;
+      }
+      .event-search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+        color: #8097a9;
+      }
+      .event-search svg {
+        width: 16px;
+        height: 16px;
+      }
+      .event-search input {
+        min-height: 32px;
+        max-width: 300px;
+        border: 0;
+        background: transparent;
+        color: #e1edf3;
+        padding: 4px;
+        font-size: 11px;
+      }
+      .event-search input::placeholder {
+        color: #8ca1b1;
+      }
+      .event-count {
+        color: #98abba;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .terminal-dots {
+        display: flex;
+        gap: 5px;
+        direction: ltr;
+      }
+      .terminal-dots i {
+        width: 7px;
+        height: 7px;
+        background: #658092;
+        border-radius: 50%;
+      }
+      .terminal-dots i:first-child {
+        background: #d8797a;
+      }
+      .terminal-dots i:nth-child(2) {
+        background: #d5b466;
+      }
+      .terminal-dots i:nth-child(3) {
+        background: #62bda0;
+      }
+      #events {
+        height: 477px;
+        max-height: 70vh;
+        min-height: 280px;
+        overflow: auto;
+        padding: 16px;
+        background: #10212e;
+        scrollbar-width: thin;
+        scrollbar-color: #365163 transparent;
+      }
+      #events:empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 28px;
+        text-align: center;
+      }
+      #events:empty:before {
+        content: '>_';
+        display: grid;
+        place-items: center;
+        width: 68px;
+        height: 68px;
+        font:
+          27px Consolas,
+          monospace;
+        direction: ltr;
+        color: #54bea2;
+        background: #172f3b;
+        border: 1px solid #274554;
+        border-radius: 18px;
+      }
+      #events:empty:after {
+        content: 'هنوز رویدادی دریافت نشده\A یک سشن انتخاب کنید؛ رویدادهای اتصال و پیام‌ها در اینجا نمایش داده می‌شوند.';
+        white-space: pre-line;
+        color: #90a7b8;
+        font-size: 11px;
+        line-height: 2.4;
+        max-width: 340px;
+      }
+      .event-entry {
+        margin-top: 0;
+        border: 1px solid #2b4150;
+        background: #172c3a;
+        border-radius: 9px;
+        margin-bottom: 10px;
+        overflow: hidden;
+      }
+      .event-entry:last-child {
+        margin-bottom: 0;
+      }
+      .event-entry summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 13px;
+        font:
+          11px/1.7 Consolas,
+          monospace;
+        direction: ltr;
+        list-style: none;
+        color: #a7bcca;
+      }
+      .event-entry summary::-webkit-details-marker {
+        display: none;
+      }
+      .event-entry summary:before {
+        content: '›';
+        font-size: 17px;
+        color: #7e9aac;
+      }
+      .event-entry[open] summary:before {
+        transform: rotate(90deg);
+      }
+      .event-title {
+        flex: 1;
+        color: #79d6b9;
+        overflow-wrap: anywhere;
+      }
+      .event-entry time {
+        font-size: 10px;
+        color: #7894a7;
+        white-space: nowrap;
+      }
+      .event-entry pre {
+        margin: 0;
+        padding: 13px 16px 16px;
+        border-top: 1px solid #ffffff08;
+        color: #c0d5e1;
+        font-size: 11px;
+      }
+      #filterEmpty {
+        background: #10212e;
+        color: #94aaba;
+        text-align: center;
+        font-size: 11px;
+        padding: 16px;
+        margin: 0;
+      }
+      .events-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        padding: 11px 20px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .events-footer svg {
+        width: 13px;
+        height: 13px;
+      }
+      .page-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 22px;
+        font-size: 10px;
+        color: #8996a3;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .skip-link {
+        position: fixed;
+        top: -100px;
+        inset-inline-start: 20px;
+        background: white;
+        padding: 8px 16px;
+        border-radius: 8px;
+        z-index: 30;
+      }
+      .skip-link:focus {
+        top: 12px;
+      }
+      @media (min-width: 1650px) {
+        .app {
+          margin-inline-end: auto;
         }
-        if (data.event === 'transport.status') return;
-        log(data);
-      };
-      current.onerror = () => {
-        if (version === generation) setTransport(false, 'خطای سوکت');
-      };
-      current.onclose = (event) => {
-        if (version !== generation) return;
-        clearTimeout(streamTimeout);
-        setTransport(
-          false,
-          event.code === 1008
-            ? 'کلید مدیریت نامعتبر است یا سشن وجود ندارد'
-            : 'سوکت قطع شد؛ تلاش مجدد…',
-        );
-        if (event.code !== 1008)
-          retryTimer = setTimeout(() => connectStream(version), 3000);
-      };
-    }
-    function choose() {
-      generation++;
-      clearTimeout(timer);
-      clearTimeout(retryTimer);
-      clearTimeout(streamTimeout);
-      socket?.close();
-      selected = $('sessions').value;
-      const row = rowsById.get(selected);
-      if (row) {
-        $('method').value = row.pairingMethod;
-        $('phone').value = row.phone || '';
       }
-      clearPairing();
-      $('events').replaceChildren();
-      $('status').textContent = '';
-      $('qr').hidden = true;
-      $('qr').removeAttribute('src');
-      setTransport(false, 'سوکت قطع است');
-      setWhatsApp(
-        'unknown',
-        selected ? 'در حال دریافت وضعیت…' : 'شماره‌ای انتخاب نشده',
-      );
-      $('qrHint').textContent = selected
-        ? 'در انتظار QR…'
-        : 'یک شماره انتخاب کنید.';
-      if (!selected) return;
-      connectStream(generation);
-      poll(generation);
-    }
-    async function poll(version) {
-      if (version !== generation) return;
-      try {
-        if ($('method').value !== 'QR' || whatsappConnected) return;
-        const qr = await api('/test-panel/' + selected + '/qr-image');
+      @media (max-width: 1250px) {
+        .sidebar {
+          width: 78px;
+          padding: 26px 13px;
+          align-items: center;
+        }
+        .side-brand {
+          padding-bottom: 22px;
+        }
+        .side-brand-text,
+        .nav-label,
+        .nav-item span,
+        .side-bottom {
+          display: none;
+        }
+        .sidebar nav {
+          margin-top: 24px;
+        }
+        .nav-item {
+          padding: 13px;
+        }
+        .app {
+          margin-inline-start: 78px;
+        }
+        .toolbar {
+          grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr);
+        }
+        .session-actions {
+          grid-column: 2;
+        }
+        .setup {
+          grid-template-columns: 1fr;
+        }
+        .connection-indicators {
+          flex-direction: row;
+          flex-wrap: wrap;
+          border: 0;
+          border-top: 1px solid var(--line);
+          padding: 13px 0 0;
+          max-width: none;
+        }
+        .hero-art {
+          gap: 10px;
+        }
+        .hero-link {
+          width: 24px;
+        }
+        .hero-link:after {
+          left: 10px;
+        }
+      }
+      @media (max-width: 900px) {
+        .metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .hero-art {
+          display: none;
+        }
+        main {
+          grid-template-columns: 275px minmax(0, 1fr);
+        }
+        .event-tools {
+          gap: 8px;
+        }
+        .terminal-dots {
+          display: none;
+        }
+      }
+      @media (max-width: 720px) {
+        .sidebar {
+          display: none;
+        }
+        .app {
+          margin: 0;
+          padding: 20px 16px;
+        }
+        .header-tag {
+          display: none;
+        }
+        h1 {
+          font-size: 23px;
+        }
+        .page-header {
+          margin-bottom: 18px;
+        }
+        .hero {
+          padding: 22px;
+        }
+        .hero h2 {
+          font-size: 17px;
+        }
+        .hero p {
+          font-size: 10px;
+        }
+        .metrics {
+          gap: 10px;
+          margin-bottom: 18px;
+        }
+        .metric {
+          padding: 14px 12px;
+          gap: 10px;
+        }
+        .metric-icon {
+          width: 33px;
+          height: 33px;
+          border-radius: 9px;
+        }
+        .metric-label {
+          font-size: 9px;
+        }
+        .metric-value {
+          font-size: 14px;
+        }
+        .metric-value.compact {
+          font-size: 11px;
+        }
+        .controls,
+        .setup,
+        .pairing-card {
+          padding: 18px;
+        }
+        .toolbar,
+        .setup-form,
+        main {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .session-actions {
+          grid-column: auto;
+        }
+        .session-actions button {
+          flex: 1;
+        }
+        .setup-form {
+          gap: 13px;
+        }
+        .events-header {
+          padding: 17px;
+        }
+        .event-tools {
+          padding: 10px 13px;
+        }
+        #events {
+          height: 420px;
+        }
+        .page-footer {
+          flex-direction: column;
+          gap: 3px;
+        }
+        .pairing-area {
+          min-height: 235px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">رفتن به پنل اتصال</a
+    ><svg
+      class="icon-sprite"
+      xmlns="http://www.w3.org/2000/svg"
+      style="display: none"
+      aria-hidden="true"
+    >
+      <symbol id="i-grid" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="7" height="7" rx="2" />
+        <rect x="14" y="3" width="7" height="7" rx="2" />
+        <rect x="3" y="14" width="7" height="7" rx="2" />
+        <rect x="14" y="14" width="7" height="7" rx="2" />
+      </symbol>
+      <symbol id="i-link" viewBox="0 0 24 24">
+        <path
+          d="m10 13 4-4m-6 7-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"
+          transform="translate(1 1)"
+        />
+      </symbol>
+      <symbol id="i-code" viewBox="0 0 24 24">
+        <path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 20" />
+      </symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24">
+        <rect x="6" y="2" width="12" height="20" rx="3" />
+        <path d="M10 18h4" />
+      </symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24">
+        <path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z" />
+        <path d="m8 12 3 3 5-6" />
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m16 16 5 5" />
+      </symbol>
+    </svg>
+    <aside class="sidebar" aria-label="ناوبری پنل">
+      <a href="#workspace" class="side-brand" aria-label="صفحهٔ اصلی پنل"
+        ><span class="side-logo"
+          ><svg
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <use href="#i-link" /></svg></span
+        ><span class="side-brand-text"
+          ><strong>WA Console</strong><small>مرکز مدیریت اتصال</small></span
+        ></a
+      >
+      <div class="nav-label">فضای کاری</div>
+      <nav>
+        <a
+          class="nav-item active"
+          aria-current="location"
+          href="#workspace"
+          aria-label="نمای کلی"
+          ><svg
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <use href="#i-grid" /></svg
+          ><span>نمای کلی</span></a
+        ><a class="nav-item" href="#sessions-panel" aria-label="مدیریت سشن‌ها"
+          ><svg
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <use href="#i-link" /></svg
+          ><span>مدیریت سشن‌ها</span></a
+        ><a class="nav-item" href="#pairing-panel" aria-label="اتصال حساب"
+          ><svg
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <use href="#i-phone" /></svg
+          ><span>اتصال حساب</span></a
+        ><a class="nav-item" href="#events-panel" aria-label="رویدادهای زنده"
+          ><svg
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <use href="#i-code" /></svg
+          ><span>رویدادهای زنده</span></a
+        >
+      </nav>
+      <div class="side-bottom">
+        <svg
+          aria-hidden="true"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <use href="#i-shield" /></svg
+        ><strong>اتصال، زیر نظر شما</strong>
+        <p>وضعیت حساب و رویدادهای هر سشن را در یک فضای واحد دنبال کنید.</p>
+        <div class="version">WHATSAPP · TEST CONSOLE</div>
+      </div>
+    </aside>
+    <div class="app" id="workspace">
+      <header class="page-header">
+        <div>
+          <div class="breadcrumb">
+            <span>فضای کاری</span><span aria-hidden="true">/</span
+            ><span>پنل اتصال</span>
+          </div>
+          <h1>مدیریت اتصال واتساپ</h1>
+          <p class="subtitle">
+            یک فضای متمرکز برای اتصال حساب‌ها و بررسی جریان پیام‌ها
+          </p>
+        </div>
+        <span class="header-tag"
+          ><svg
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <use href="#i-shield" /></svg
+          >دسترسی مدیریت</span
+        >
+      </header>
+      <section class="hero" aria-label="راهنمای شروع">
+        <div>
+          <div class="eyebrow">کنسول تست واتساپ</div>
+          <h2>از اولین اتصال، تا آخرین رویداد.</h2>
+          <p>
+            کلید مدیریت را وارد کنید، سشن خود را انتخاب کنید و وضعیت ارتباط را
+            به‌صورت زنده دنبال کنید.
+          </p>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <span class="hero-node"
+            ><svg
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <use href="#i-phone" /></svg></span
+          ><span class="hero-link"></span
+          ><span class="hero-node accent"
+            ><svg
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <use href="#i-link" /></svg></span
+          ><span class="hero-link"></span
+          ><span class="hero-node"
+            ><svg
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <use href="#i-code" /></svg
+          ></span>
+        </div>
+      </section>
+      <section class="metrics" aria-label="خلاصهٔ وضعیت">
+        <div class="metric">
+          <span class="metric-icon"
+            ><svg
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <use href="#i-grid" /></svg
+          ></span>
+          <div>
+            <p class="metric-label">سشن‌های بارگیری‌شده</p>
+            <p id="sessionCount" class="metric-value">—</p>
+          </div>
+        </div>
+        <div class="metric">
+          <span class="metric-icon"
+            ><svg
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <use href="#i-link" /></svg
+          ></span>
+          <div>
+            <p class="metric-label">ارتباط زندهٔ پنل</p>
+            <p id="streamSummary" class="metric-value compact">قطع</p>
+          </div>
+        </div>
+        <div class="metric">
+          <span class="metric-icon"
+            ><svg
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <use href="#i-phone" /></svg
+          ></span>
+          <div>
+            <p class="metric-label">حساب واتساپ</p>
+            <p id="accountSummary" class="metric-value compact">انتخاب نشده</p>
+          </div>
+        </div>
+        <div class="metric">
+          <span class="metric-icon"
+            ><svg
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <use href="#i-code" /></svg
+          ></span>
+          <div>
+            <p class="metric-label">رویدادهای دریافت‌شده</p>
+            <p id="eventTotal" class="metric-value">۰</p>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="sessions-panel"
+        class="card controls"
+        aria-labelledby="sessionsHeading"
+      >
+        <div class="card-heading">
+          <span class="step" aria-hidden="true">۰۱</span>
+          <h2 id="sessionsHeading">انتخاب و مدیریت سشن</h2>
+        </div>
+        <div class="toolbar">
+          <div class="field">
+            <label for="token">کلید مدیریت</label>
+            <div class="input-action">
+              <input
+                id="token"
+                type="password"
+                placeholder="کلید دسترسی مدیریت"
+                autocomplete="off"
+                spellcheck="false"
+              /><button id="load" class="primary">بارگیری شماره‌ها</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="sessions">سشن مورد نظر</label
+            ><select id="sessions">
+              <option value="">شماره را انتخاب کنید</option>
+            </select>
+          </div>
+          <div class="session-actions">
+            <button id="reconnect">اتصال مجدد</button
+            ><button id="disconnect" class="danger">قطع اتصال</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card setup" aria-labelledby="setupHeading">
+        <div>
+          <div class="card-heading">
+            <span class="step" aria-hidden="true">۰۲</span>
+            <h2 id="setupHeading">اتصال یک حساب جدید</h2>
+          </div>
+          <div class="setup-form">
+            <div class="field">
+              <label for="phone">شمارهٔ همراه با کد کشور</label
+              ><input
+                id="phone"
+                type="tel"
+                inputmode="tel"
+                placeholder="+98 912 123 4567"
+                dir="ltr"
+                maxlength="30"
+                autocomplete="tel"
+                aria-describedby="phoneHint"
+              />
+            </div>
+            <div class="field">
+              <label for="method">روش اتصال</label
+              ><select id="method">
+                <option value="QR">اسکن QR</option>
+                <option value="CODE">کد اتصال</option>
+              </select>
+            </div>
+            <button id="create" class="primary">
+              ساخت سشن جدید <span aria-hidden="true">＋</span>
+            </button>
+          </div>
+          <p id="phoneHint" class="setup-note">
+            برای اتصال با کد، شمارهٔ همراه الزامی است.
+          </p>
+        </div>
+        <div class="connection-indicators" aria-label="وضعیت ارتباط">
+          <span id="transport" role="status" aria-live="polite"
+            >سوکت قطع است</span
+          >
+          <span id="whatsapp" class="unknown" role="status" aria-live="polite"
+            >واتساپ: شماره‌ای انتخاب نشده</span
+          >
+        </div>
+      </section>
+      <p id="error" role="alert"></p>
+
+      <main>
+        <section
+          id="pairing-panel"
+          class="card pairing-card"
+          aria-labelledby="pairingHeading"
+        >
+          <div class="section-head">
+            <h2 id="pairingHeading">اتصال و وضعیت حساب</h2>
+            <svg
+              class="section-icon"
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            >
+              <rect x="6" y="2" width="12" height="20" rx="3" />
+              <path d="M10 18h4" />
+            </svg>
+          </div>
+          <div class="account">
+            <span>شمارهٔ حساب متصل</span><b id="accountPhone" dir="ltr">—</b>
+          </div>
+          <p id="connectionDetail" aria-live="polite"></p>
+          <div class="pairing-area">
+            <div class="connected-symbol" aria-hidden="true">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <use href="#i-shield" />
+              </svg>
+            </div>
+            <div class="pairing-symbol" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />
+                <path
+                  d="M7 7h3v3H7zm7 0h3v3h-3zM7 14h3v3H7zm7 0h3m-3 0v3h3v-1"
+                />
+              </svg>
+            </div>
+            <p id="qrHint">برای شروع، یک شماره انتخاب کنید.</p>
+            <img id="qr" hidden alt="QR اتصال واتساپ" />
+            <div id="codeBox" hidden>
+              <p>
+                در واتساپ به «دستگاه‌های متصل» و سپس «اتصال دستگاه» بروید؛ اتصال
+                با شماره تلفن را انتخاب و کد زیر را وارد کنید.
+              </p>
+              <p id="pairingCode" dir="ltr" aria-live="polite">—</p>
+            </div>
+            <p id="pairingExpiry" aria-live="polite"></p>
+          </div>
+          <button id="renew" class="primary">دریافت / تمدید QR</button>
+          <p class="pairing-help">واتساپ ← دستگاه‌های متصل ← اتصال دستگاه</p>
+          <details>
+            <summary>جزئیات وضعیت سشن</summary>
+            <pre id="status"></pre>
+          </details>
+        </section>
+
+        <section
+          id="events-panel"
+          class="card events-card"
+          aria-labelledby="eventsHeading"
+        >
+          <div class="section-head events-header">
+            <div>
+              <h2 id="eventsHeading" class="live-label">رویدادهای زنده</h2>
+              <p class="subtitle">پیام‌ها و تغییرات اتصال سشن انتخاب‌شده</p>
+            </div>
+            <button id="clear">پاک‌کردن نمایش</button>
+          </div>
+          <div class="event-tools">
+            <div class="event-search">
+              <svg
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <use href="#i-search" /></svg
+              ><input
+                id="eventSearch"
+                type="search"
+                placeholder="جست‌وجو در رویدادها…"
+                aria-label="جست‌وجو در رویدادها"
+                autocomplete="off"
+              />
+            </div>
+            <span class="event-count"><b id="visibleCount">۰</b> رویداد</span
+            ><span class="terminal-dots" aria-hidden="true"
+              ><i></i><i></i><i></i
+            ></span>
+          </div>
+          <div
+            id="events"
+            role="region"
+            aria-label="رویدادهای زندهٔ سشن"
+            tabindex="0"
+          ></div>
+          <p id="filterEmpty" hidden>رویدادی مطابق جست‌وجوی شما پیدا نشد.</p>
+          <div class="events-footer">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" /></svg
+            >آخرین ۲۰۰ رویداد · جدیدترین رویداد در بالا
+          </div>
+        </section>
+      </main>
+      <footer class="page-footer">
+        <span>پنل بررسی اتصال واتساپ</span
+        ><span>برای مشاهدهٔ رویدادها، اتصال سوکت را برقرار نگه دارید.</span>
+      </footer>
+    </div>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const base = location.pathname.replace(/\/test-panel\/?$/, '');
+      let selected = '',
+        socket,
+        timer,
+        generation = 0,
+        retryTimer;
+      let rowsById = new Map(),
+        pairingBusy = false,
+        codeExpiry = 0,
+        qrExpiry = 0;
+      function clearPairing() {
+        codeExpiry = 0;
+        qrExpiry = 0;
+        $('pairingCode').textContent = '—';
+        $('pairingExpiry').textContent = '';
+        $('qr').hidden = true;
+        $('qr').removeAttribute('src');
+      }
+      function updatePairingControls() {
+        const code = $('method').value === 'CODE';
+        $('codeBox').hidden = !code || whatsappConnected;
+        if (code) $('qr').hidden = true;
+        $('renew').textContent = whatsappConnected
+          ? 'حساب متصل است'
+          : code
+            ? 'دریافت / تمدید کد اتصال'
+            : 'دریافت / تمدید QR';
+        $('renew').disabled = pairingBusy || !selected || whatsappConnected;
+        $('create').disabled = pairingBusy;
+        $('method').disabled = pairingBusy;
+        $('load').disabled = pairingBusy;
+        $('phone').disabled = pairingBusy;
+        $('sessions').disabled = pairingBusy;
+        for (const id of ['reconnect', 'disconnect'])
+          $(id).disabled = pairingBusy || !selected;
+      }
+      function phoneInput(required) {
+        const value = $('phone')
+          .value.trim()
+          .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 1776))
+          .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 1632));
+        if (!value) {
+          if (required)
+            throw new Error(
+              'برای اتصال با کد، شماره همراه با کد کشور لازم است؛ مثلاً 989121234567.',
+            );
+          return undefined;
+        }
+        if (!/^\+?[\d\s().-]+$/.test(value))
+          throw new Error('شماره فقط باید شامل ارقام و کد کشور باشد.');
+        const number = value.replace(/[\s().-]/g, '').replace(/^\+/, '');
+        if (!/^[1-9]\d{5,14}$/.test(number))
+          throw new Error(
+            'شمارهٔ بین‌المللی معتبر با کد کشور وارد کنید؛ مثلاً 989121234567.',
+          );
+        return number;
+      }
+      async function api(path, body) {
+        if ($('token').value.length < 32)
+          throw new Error('کلید مدیریت باید حداقل ۳۲ کاراکتر باشد.');
+        const response = await fetch(base + path, {
+          method: body === undefined ? 'GET' : 'POST',
+          cache: 'no-store',
+          headers: {
+            Authorization: 'Bearer ' + $('token').value,
+            'Content-Type': 'application/json',
+          },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(
+            Array.isArray(data.message)
+              ? data.message.join(', ')
+              : data.message || response.status,
+          );
+        return data;
+      }
+      const numberFormat = new Intl.NumberFormat('fa-IR');
+      let receivedEvents = 0;
+      function filterEvents() {
+        const query = $('eventSearch').value.trim().toLocaleLowerCase();
+        let visible = 0;
+        for (const entry of $('events').children) {
+          entry.hidden = !entry.textContent.toLocaleLowerCase().includes(query);
+          if (!entry.hidden) visible++;
+        }
+        $('visibleCount').textContent = numberFormat.format(visible);
+        $('filterEmpty').hidden =
+          !query || visible > 0 || !$('events').children.length;
+      }
+      function clearEvents() {
+        $('events').replaceChildren();
+        receivedEvents = 0;
+        $('eventTotal').textContent = '۰';
+        filterEvents();
+      }
+      function log(data) {
+        const entry = document.createElement('details');
+        entry.className = 'event-entry';
+        entry.open = true;
+        const summary = document.createElement('summary');
+        const title = document.createElement('span');
+        title.className = 'event-title';
+        title.textContent =
+          typeof data.event === 'string' ? data.event : 'event';
+        const time = document.createElement('time');
+        const timestamp = new Date(data.at || Date.now());
+        if (!Number.isNaN(timestamp.getTime())) {
+          time.dateTime = timestamp.toISOString();
+          time.textContent = timestamp.toLocaleTimeString('fa-IR');
+        }
+        summary.append(title, time);
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(data, null, 2);
+        entry.append(summary, pre);
+        $('events').prepend(entry);
+        while ($('events').children.length > 200)
+          $('events').lastChild.remove();
+        receivedEvents++;
+        $('eventTotal').textContent = numberFormat.format(receivedEvents);
+        filterEvents();
+      }
+      async function run(action) {
+        $('error').textContent = '';
+        try {
+          await action();
+        } catch (error) {
+          $('error').textContent = error.message;
+        }
+      }
+      async function load(preferred = selected) {
+        const rows = await api('/sessions');
+        rowsById = new Map(rows.map((row) => [row.id, row]));
+        $('sessionCount').textContent = numberFormat.format(rows.length);
+        $('sessions').replaceChildren(new Option('شماره را انتخاب کنید', ''));
+        for (const row of rows)
+          $('sessions').add(
+            new Option(
+              (row.phone || row.name) + ' — ' + row.runtime.status,
+              row.id,
+            ),
+          );
+        $('sessions').value = rows.some((row) => row.id === preferred)
+          ? preferred
+          : '';
+        choose();
+      }
+      function setTransport(connected, message) {
+        $('transport').classList.toggle('connected', connected);
+        document.body.classList.toggle('stream-connected', connected);
+        $('streamSummary').textContent = connected ? 'متصل' : 'قطع';
+        $('streamSummary').dataset.connected = String(connected);
+        $('transport').textContent = message;
+        if (!connected) setWhatsApp('unknown');
+      }
+      let whatsappConnected = false;
+      let streamTimeout;
+      function setWhatsApp(state, label) {
+        if (state === 'unknown') $('connectionDetail').textContent = '';
+        const wasConnected = whatsappConnected;
+        whatsappConnected = state === 'connected';
+        document
+          .querySelector('.pairing-area')
+          .classList.toggle('pairing-connected', whatsappConnected);
+        if (whatsappConnected)
+          $('qrHint').textContent =
+            'حساب شما متصل است. پیام‌ها و تغییرات اتصال را در بخش رویدادها دنبال کنید.';
+        else if (wasConnected)
+          $('qrHint').textContent =
+            'برای اتصال دوباره، وضعیت سشن را بررسی کنید.';
+        $('accountSummary').textContent = {
+          connected: 'متصل',
+          connecting: 'در حال اتصال',
+          disconnected: 'قطع',
+          unknown: selected ? 'در انتظار وضعیت' : 'انتخاب نشده',
+        }[state];
+        $('accountSummary').dataset.connected = String(whatsappConnected);
+        if (whatsappConnected) clearPairing();
+        updatePairingControls();
+        if (state !== 'connected') $('accountPhone').textContent = '—';
+        $('whatsapp').className = state;
+        $('whatsapp').textContent =
+          'واتساپ: ' +
+          (label ||
+            {
+              connected: 'متصل',
+              disconnected: 'قطع است',
+              connecting: 'در حال اتصال…',
+              unknown: 'وضعیت نامشخص',
+            }[state]);
+      }
+      function connectStream(version) {
+        if (!selected || version !== generation) return;
+        const url = new URL(base + '/connections/events', location.origin);
+        url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const current = (socket = new WebSocket(url));
+        current.onopen = () => {
+          if (version !== generation) return current.close();
+          streamTimeout = setTimeout(() => current.close(), 40000);
+          current.send(
+            JSON.stringify({ token: $('token').value, sessionId: selected }),
+          );
+        };
+        current.onmessage = (event) => {
+          if (version !== generation) return;
+          clearTimeout(streamTimeout);
+          streamTimeout = setTimeout(() => current.close(), 40000);
+          const data = JSON.parse(event.data);
+          if (data.sessionId !== selected) return;
+          if (data.event === 'transport.status')
+            setTransport(data.data.connected, 'سوکت زنده متصل است');
+          if (data.event === 'whatsapp.status') {
+            const state = data.data;
+            const labels = {
+              CONNECTED: 'متصل',
+              CONNECTING: 'در حال اتصال…',
+              RECONNECTING: 'در حال اتصال مجدد…',
+              AWAITING_PAIRING: 'منتظر اسکن QR یا ورود کد',
+              AUTHENTICATING: 'در حال تأیید حساب…',
+              EXPIRED: 'مهلت اتصال با QR یا کد منقضی شده',
+              LOGGED_OUT: 'از حساب خارج شده؛ اتصال دوباره لازم است',
+              FAILED: 'اتصال ناموفق',
+              DISCONNECTED: 'قطع است',
+            };
+            const reasons = {
+              SOCKET_CLOSED: 'سوکت واتساپ بسته شده است',
+              TIMEOUT_OR_CONNECTION_LOST:
+                'ارتباط از دست رفته یا زمان انتظار تمام شده است',
+              LOGGED_OUT: 'دستگاه از حساب واتساپ خارج شده است',
+              CONNECTION_REPLACED: 'اتصال با اتصال دیگری جایگزین شده است',
+              INVALID_SESSION: 'اعتبار احراز هویت سشن قابل استفاده نیست',
+              MULTIDEVICE_MISMATCH: 'اطلاعات اتصال چنددستگاهی ناسازگار است',
+              FORBIDDEN: 'واتساپ اجازهٔ اتصال نداده است',
+              SERVICE_UNAVAILABLE: 'سرویس واتساپ موقتاً در دسترس نیست',
+              RESTART_REQUIRED: 'واتساپ درخواست ساخت دوبارهٔ سوکت داده است',
+              QR_EXPIRED: 'مهلت اسکن QR تمام شده است',
+              PAIRING_CODE_EXPIRED: 'کد اتصال منقضی شده است',
+              MANUAL_DISCONNECT: 'اتصال به درخواست کاربر قطع شده است',
+              MANUAL_RESTART: 'اتصال به درخواست کاربر دوباره راه‌اندازی می‌شود',
+              CONNECTION_STUCK:
+                'راه‌اندازی اتصال بیش از مهلت تعیین‌شده طول کشیده است',
+              RETRY_LIMIT_REACHED:
+                'تعداد تلاش‌های اتصال مجدد به حد مجاز رسیده است',
+              INTERNAL_ERROR: 'خطای داخلی یا ذخیره‌سازی؛ لاگ سرور بررسی شود',
+              UNKNOWN_CLOSE: 'اتصال بسته شده؛ علت دقیق مشخص نیست',
+            };
+            setWhatsApp(
+              state.connected
+                ? 'connected'
+                : ['CONNECTING', 'RECONNECTING', 'AUTHENTICATING'].includes(
+                      state.status,
+                    )
+                  ? 'connecting'
+                  : 'disconnected',
+              labels[state.status] || state.status,
+            );
+            $('connectionDetail').textContent = [
+              reasons[state.reason] || state.reason,
+              state.requiresPairing ? 'نیاز به QR یا کد اتصال دارد.' : '',
+              state.lastDisconnectCode != null
+                ? 'کد آخرین قطع: ' + state.lastDisconnectCode
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' — ');
+            $('accountPhone').textContent =
+              state.connected && state.accountPhone
+                ? '+' + state.accountPhone
+                : '—';
+            $('status').textContent = JSON.stringify(state, null, 2);
+          }
+          if (data.event === 'transport.status') return;
+          log(data);
+        };
+        current.onerror = () => {
+          if (version === generation) setTransport(false, 'خطای سوکت');
+        };
+        current.onclose = (event) => {
+          if (version !== generation) return;
+          clearTimeout(streamTimeout);
+          setTransport(
+            false,
+            event.code === 1008
+              ? 'کلید مدیریت نامعتبر است یا سشن وجود ندارد'
+              : 'سوکت قطع شد؛ تلاش مجدد…',
+          );
+          if (event.code !== 1008)
+            retryTimer = setTimeout(() => connectStream(version), 3000);
+        };
+      }
+      function choose() {
+        generation++;
+        clearTimeout(timer);
+        clearTimeout(retryTimer);
+        clearTimeout(streamTimeout);
+        socket?.close();
+        selected = $('sessions').value;
+        const row = rowsById.get(selected);
+        if (row) {
+          $('method').value = row.pairingMethod;
+          $('phone').value = row.phone || '';
+        }
+        clearPairing();
+        clearEvents();
+        $('status').textContent = '';
+        $('qr').hidden = true;
+        $('qr').removeAttribute('src');
+        setTransport(false, 'سوکت قطع است');
+        setWhatsApp(
+          'unknown',
+          selected ? 'در حال دریافت وضعیت…' : 'شماره‌ای انتخاب نشده',
+        );
+        $('qrHint').textContent = selected
+          ? 'در انتظار QR…'
+          : 'یک شماره انتخاب کنید.';
+        if (!selected) return;
+        connectStream(generation);
+        poll(generation);
+      }
+      async function poll(version) {
+        if (version !== generation) return;
+        try {
+          if ($('method').value !== 'QR' || whatsappConnected) return;
+          const qr = await api('/test-panel/' + selected + '/qr-image');
+          if (
+            version !== generation ||
+            $('method').value !== 'QR' ||
+            whatsappConnected
+          )
+            return;
+          qrExpiry = qr.expiresAt ? Date.parse(qr.expiresAt) : 0;
+          if (!qrExpiry) $('pairingExpiry').textContent = '';
+          $('qr').hidden = !qr.image;
+          if (qr.image) {
+            if ($('qr').src !== qr.image) $('qr').src = qr.image;
+          } else $('qr').removeAttribute('src');
+          $('qrHint').textContent = whatsappConnected
+            ? 'واتساپ متصل است؛ پیام جدید بفرستید.'
+            : qr.image
+              ? 'واتساپ ← دستگاه‌های متصل ← اتصال دستگاه'
+              : 'QR آماده نیست؛ برای سشن جدید دکمهٔ دریافت QR را بزنید.';
+        } catch (error) {
+          if (version === generation) {
+            $('error').textContent = error.message;
+            $('qr').hidden = true;
+          }
+        } finally {
+          if (version === generation)
+            timer = setTimeout(() => poll(version), 2000);
+        }
+      }
+      $('load').onclick = () => run(() => load());
+      $('sessions').onchange = choose;
+      $('create').onclick = () =>
+        run(async () => {
+          if (pairingBusy) return;
+          const method = $('method').value;
+          const phone = phoneInput(method === 'CODE');
+          pairingBusy = true;
+          updatePairingControls();
+          try {
+            const row = await api('/sessions', {
+              name: phone || 'QR ' + new Date().toLocaleTimeString(),
+              ...(phone ? { phone } : {}),
+              pairingMethod: method,
+            });
+            await load(row.id);
+            if (method === 'CODE') await requestPairing();
+          } finally {
+            pairingBusy = false;
+            updatePairingControls();
+          }
+        });
+      for (const action of ['reconnect', 'disconnect'])
+        $(action).onclick = () =>
+          run(async () => {
+            if (!selected) throw new Error('ابتدا شماره را انتخاب کنید.');
+            await api('/sessions/' + selected + '/' + action, {});
+          });
+      async function requestPairing() {
+        if (!selected) throw new Error('ابتدا سشن را انتخاب کنید.');
+        if (whatsappConnected)
+          throw new Error(
+            'این حساب متصل است و نیاز به اتصال مجدد با QR یا کد ندارد.',
+          );
+        const id = selected,
+          version = generation,
+          method = $('method').value;
+        const phone = method === 'CODE' ? phoneInput(true) : undefined;
+        clearPairing();
+        $('qrHint').textContent =
+          method === 'CODE'
+            ? 'در حال دریافت کد؛ ممکن است تا یک دقیقه طول بکشد…'
+            : 'در انتظار QR…';
+        const result = await api(
+          '/sessions/' + id + (method === 'CODE' ? '/pairing-code' : '/qr'),
+          method === 'CODE' ? { phone } : {},
+        );
         if (
           version !== generation ||
-          $('method').value !== 'QR' ||
+          method !== $('method').value ||
           whatsappConnected
         )
           return;
-        qrExpiry = qr.expiresAt ? Date.parse(qr.expiresAt) : 0;
-        if (!qrExpiry) $('pairingExpiry').textContent = '';
-        $('qr').hidden = !qr.image;
-        if (qr.image) {
-          if ($('qr').src !== qr.image) $('qr').src = qr.image;
-        } else $('qr').removeAttribute('src');
-        $('qrHint').textContent = whatsappConnected
-          ? 'واتساپ متصل است؛ پیام جدید بفرستید.'
-          : qr.image
-            ? 'واتساپ ← دستگاه‌های متصل ← اتصال دستگاه'
-            : 'QR آماده نیست؛ برای سشن جدید دکمهٔ دریافت QR را بزنید.';
-      } catch (error) {
-        if (version === generation) {
-          $('error').textContent = error.message;
+        if (rowsById.has(id)) {
+          rowsById.get(id).pairingMethod = method;
+          if (phone) rowsById.get(id).phone = phone;
+        }
+        if (method === 'CODE') {
+          $('pairingCode').textContent = result.code;
+          codeExpiry = Date.parse(result.expiresAt);
+          $('qrHint').textContent =
+            'کد را در واتساپ همان شماره وارد کنید. کد را با دیگران به اشتراک نگذارید.';
+        }
+      }
+      $('renew').onclick = () =>
+        run(async () => {
+          if (pairingBusy) return;
+          pairingBusy = true;
+          updatePairingControls();
+          try {
+            await requestPairing();
+          } finally {
+            pairingBusy = false;
+            updatePairingControls();
+          }
+        });
+      $('method').onchange = () => {
+        clearPairing();
+        updatePairingControls();
+        $('qrHint').textContent =
+          'برای شروع روش انتخاب‌شده، دکمهٔ دریافت را بزنید.';
+      };
+      const expiryTimer = setInterval(() => {
+        const expires = $('method').value === 'CODE' ? codeExpiry : qrExpiry;
+        if (!expires) return;
+        const seconds = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
+        $('pairingExpiry').textContent = seconds
+          ? 'اعتبار باقی‌مانده: ' + seconds + ' ثانیه'
+          : 'منقضی شد؛ دوباره درخواست دهید.';
+        if (!seconds) {
+          $('pairingCode').textContent = '—';
           $('qr').hidden = true;
         }
-      } finally {
-        if (version === generation)
-          timer = setTimeout(() => poll(version), 2000);
-      }
-    }
-    $('load').onclick = () => run(() => load());
-    $('sessions').onchange = choose;
-    $('create').onclick = () =>
-      run(async () => {
-        if (pairingBusy) return;
-        const method = $('method').value;
-        const phone = phoneInput(method === 'CODE');
-        pairingBusy = true;
-        updatePairingControls();
-        try {
-          const row = await api('/sessions', {
-            name: phone || 'QR ' + new Date().toLocaleTimeString(),
-            ...(phone ? { phone } : {}),
-            pairingMethod: method,
-          });
-          await load(row.id);
-          if (method === 'CODE') await requestPairing();
-        } finally {
-          pairingBusy = false;
-          updatePairingControls();
-        }
-      });
-    for (const action of ['reconnect', 'disconnect'])
-      $(action).onclick = () =>
-        run(async () => {
-          if (!selected) throw new Error('ابتدا شماره را انتخاب کنید.');
-          await api('/sessions/' + selected + '/' + action, {});
-        });
-    async function requestPairing() {
-      if (!selected) throw new Error('ابتدا سشن را انتخاب کنید.');
-      if (whatsappConnected)
-        throw new Error(
-          'این حساب متصل است و نیاز به اتصال مجدد با QR یا کد ندارد.',
-        );
-      const id = selected,
-        version = generation,
-        method = $('method').value;
-      const phone = method === 'CODE' ? phoneInput(true) : undefined;
-      clearPairing();
-      $('qrHint').textContent =
-        method === 'CODE'
-          ? 'در حال دریافت کد؛ ممکن است تا یک دقیقه طول بکشد…'
-          : 'در انتظار QR…';
-      const result = await api(
-        '/sessions/' + id + (method === 'CODE' ? '/pairing-code' : '/qr'),
-        method === 'CODE' ? { phone } : {},
-      );
-      if (
-        version !== generation ||
-        method !== $('method').value ||
-        whatsappConnected
-      )
-        return;
-      if (rowsById.has(id)) {
-        rowsById.get(id).pairingMethod = method;
-        if (phone) rowsById.get(id).phone = phone;
-      }
-      if (method === 'CODE') {
-        $('pairingCode').textContent = result.code;
-        codeExpiry = Date.parse(result.expiresAt);
-        $('qrHint').textContent =
-          'کد را در واتساپ همان شماره وارد کنید. کد را با دیگران به اشتراک نگذارید.';
-      }
-    }
-    $('renew').onclick = () =>
-      run(async () => {
-        if (pairingBusy) return;
-        pairingBusy = true;
-        updatePairingControls();
-        try {
-          await requestPairing();
-        } finally {
-          pairingBusy = false;
-          updatePairingControls();
-        }
-      });
-    $('method').onchange = () => {
-      clearPairing();
+      }, 1000);
       updatePairingControls();
-      $('qrHint').textContent =
-        'برای شروع روش انتخاب‌شده، دکمهٔ دریافت را بزنید.';
-    };
-    const expiryTimer = setInterval(() => {
-      const expires = $('method').value === 'CODE' ? codeExpiry : qrExpiry;
-      if (!expires) return;
-      const seconds = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
-      $('pairingExpiry').textContent = seconds
-        ? 'اعتبار باقی‌مانده: ' + seconds + ' ثانیه'
-        : 'منقضی شد؛ دوباره درخواست دهید.';
-      if (!seconds) {
-        $('pairingCode').textContent = '—';
-        $('qr').hidden = true;
+      $('clear').onclick = clearEvents;
+      $('eventSearch').oninput = filterEvents;
+      for (const link of document.querySelectorAll('.nav-item')) {
+        link.addEventListener('click', () => {
+          for (const item of document.querySelectorAll('.nav-item')) {
+            item.classList.toggle('active', item === link);
+            if (item === link) item.setAttribute('aria-current', 'location');
+            else item.removeAttribute('aria-current');
+          }
+        });
       }
-    }, 1000);
-    updatePairingControls();
-    $('clear').onclick = () => $('events').replaceChildren();
-    window.addEventListener('beforeunload', () => {
-      clearInterval(expiryTimer);
-      clearTimeout(streamTimeout);
-      generation++;
-      clearTimeout(timer);
-      clearTimeout(retryTimer);
-      socket?.close();
-    });
-  </script>
+      window.addEventListener('beforeunload', () => {
+        clearInterval(expiryTimer);
+        clearTimeout(streamTimeout);
+        generation++;
+        clearTimeout(timer);
+        clearTimeout(retryTimer);
+        socket?.close();
+      });
+    </script>
+  </body>
 </html>

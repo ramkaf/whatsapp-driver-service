@@ -22,9 +22,9 @@ export class PrismaService
       throw new Error('DATABASE_URL is required for Prisma');
     }
     const url = new URL(config.databaseUrl);
-url.searchParams.set('allowPublicKeyRetrieval', 'true');
+    url.searchParams.set('allowPublicKeyRetrieval', 'true');
 
-super({ adapter: new PrismaMariaDb(url.toString()) });
+    super({ adapter: new PrismaMariaDb(url.toString()) });
   }
 
   async onModuleInit(): Promise<void> {

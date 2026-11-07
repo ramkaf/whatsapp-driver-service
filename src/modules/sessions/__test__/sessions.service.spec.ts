@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SessionsService } from '../providers/sessions.service.ts';
 import type { IAppConfig } from '@libs/common';
 import type { SessionRepository } from '../session.repository.ts';
-import type { SessionManagerService } from '../../connection/providers/session-manager.service.ts';
+import type { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
 
 function fixture(max = 50) {
   const rows: Record<string, unknown>[] = [];

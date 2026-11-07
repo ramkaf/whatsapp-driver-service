@@ -1,4 +1,3 @@
-
 export class AuthStateQueue {
   private tail: Promise<void> = Promise.resolve();
 
@@ -6,15 +5,11 @@ export class AuthStateQueue {
 
   private closed = false;
 
-  constructor(
-    private readonly onFailure: (error: unknown) => void,
-  ) {}
+  constructor(private readonly onFailure: (error: unknown) => void) {}
 
   run<T>(operation: () => Promise<T>): Promise<T> {
     if (this.closed) {
-      return Promise.reject(
-        new Error('Authentication store is closed'),
-      );
+      return Promise.reject(new Error('Authentication store is closed'));
     }
 
     const task = this.tail.then(async () => {

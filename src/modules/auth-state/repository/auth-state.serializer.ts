@@ -1,4 +1,3 @@
-
 import { BufferJSON } from '@whiskeysockets/baileys';
 import { Prisma } from '@libs/prisma';
 
@@ -10,9 +9,6 @@ export class AuthStateSerializer {
   }
 
   static decode<T>(value: unknown): T {
-    return JSON.parse(
-      JSON.stringify(value),
-      BufferJSON.reviver,
-    ) as T;
+    return JSON.parse(JSON.stringify(value), BufferJSON.reviver) as T;
   }
 }

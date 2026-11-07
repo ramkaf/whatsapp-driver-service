@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import QRCode from 'qrcode';
 import { AdminGuard } from '../sessions/guards/admin.guard.ts';
-import { SessionManagerService } from '../connection/providers/session-manager.service.ts';
+import { SessionManagerService } from '../connection/providers/session/session-manager.service.ts';
 
 // صفحهٔ آزمایش اتصال واتساپ و تصویر QR محافظت‌شدهٔ هر سشن را به مرورگر ارائه می‌کند.
 @Controller('test-panel')

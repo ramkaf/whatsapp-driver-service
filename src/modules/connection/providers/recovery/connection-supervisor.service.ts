@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 
-// فاصلهٔ زمانی و سقف تلاش‌های اتصال مجدد سشن را محاسبه می‌کند.
+// Calculates bounded reconnect delays with jitter and controlled restart timing.
 @Injectable()
 export class ConnectionSupervisorService {
   constructor(@Inject(configuer.KEY) private readonly config: IAppConfig) {}

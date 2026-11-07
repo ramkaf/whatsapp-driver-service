@@ -1,7 +1,4 @@
-
-import {
-  type AuthenticationState,
-} from '@whiskeysockets/baileys';
+import { type AuthenticationState } from '@whiskeysockets/baileys';
 
 import { PrismaService } from '@libs/prisma';
 
@@ -27,19 +24,13 @@ export class AuthStateContext implements AuthContext {
   ) {
     this.state = {
       creds,
-      keys: new AuthStateKeyStore(
-        prisma,
-        sessionId,
-        queue,
-      ),
+      keys: new AuthStateKeyStore(prisma, sessionId, queue),
     };
   }
 
   saveCreds = (): Promise<void> => {
     // Capture a snapshot before queue execution.
-    const snapshot = AuthStateSerializer.encode(
-      this.state.creds,
-    );
+    const snapshot = AuthStateSerializer.encode(this.state.creds);
 
     return this.queue.run(async () => {
       await this.prisma.waAuthCreds.upsert({

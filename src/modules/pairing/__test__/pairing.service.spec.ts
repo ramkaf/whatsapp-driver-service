@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PairingService } from '../providers/pairing.service.ts';
-import type { SessionManagerService } from '../../connection/providers/session-manager.service.ts';
+import type { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
 import type { SessionRepository } from '../../sessions/session.repository.ts';
 
 function fixture() {

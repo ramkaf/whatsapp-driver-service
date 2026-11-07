@@ -1,3 +1,12 @@
+import type { MockInstance } from 'vitest';
+import type {
+  SessionPersistence,
+  SessionAuthentication,
+  SessionSocketFactory,
+} from '../interfaces/session-dependencies.ts';
+import { DisconnectClassifierService } from '../providers/disconnect/disconnect-classifier.service.ts';
+import { SessionRuntimeService } from '../providers/session/session-runtime.service.ts';
+import { SocketLifecycleService } from '../providers/socket/socket-lifecycle.service.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { Logger } from '@nestjs/common';
@@ -9,15 +18,10 @@ import type {
 } from '@whiskeysockets/baileys';
 import type { IAppConfig } from '@libs/common';
 import type { WaSession } from '@libs/prisma';
-import { SessionManagerService } from '../providers/session-manager.service.ts';
-import { ConnectionHandlerService } from '../providers/connection-handler.service.ts';
-import { ConnectionSupervisorService } from '../providers/connection-supervisor.service.ts';
-import type { SessionRepository } from '../../sessions/session.repository.ts';
-import type {
-  AuthStateService,
-} from '../../auth-state/providers/auth-state.service.ts';
-import type { SocketFactoryService } from '../providers/socket-factory.service.ts';
-import { AuthContext } from '../../auth-state/context/auth-state.context.ts';
+import { SessionManagerService } from '../providers/session/session-manager.service.ts';
+import { ConnectionHandlerService } from '../providers/events/connection-handler.service.ts';
+import { ConnectionSupervisorService } from '../providers/recovery/connection-supervisor.service.ts';
+import type { AuthContext } from '../../auth-state/context/auth-state.context.ts';
 
 vi.mock('node:timers/promises', () => ({
   setTimeout: (
@@ -87,6 +91,7 @@ function socket() {
 
 describe('SessionManagerService', () => {
   let manager: SessionManagerService;
+  let loggerError: MockInstance;
   let rows: Map<string, WaSession>;
   let sockets: ReturnType<typeof socket>[];
   let contexts: AuthContext[];
@@ -124,7 +129,9 @@ describe('SessionManagerService', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
     vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
     vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
-    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+    loggerError = vi
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => {});
     rows = new Map([['one', row('one')]]);
     sockets = [];
     contexts = [];
@@ -177,12 +184,14 @@ describe('SessionManagerService', () => {
       }),
     };
     manager = new SessionManagerService(
-      repository as unknown as SessionRepository,
-      authStore as unknown as AuthStateService,
-      factory as unknown as SocketFactoryService,
-      new ConnectionHandlerService(),
+      repository as unknown as SessionPersistence,
+      authStore as unknown as SessionAuthentication,
+      factory as unknown as SessionSocketFactory,
+      new ConnectionHandlerService(new DisconnectClassifierService()),
       new ConnectionSupervisorService(config),
       config,
+      new SessionRuntimeService(),
+      new SocketLifecycleService(),
     );
   });
   afterEach(async () => {
@@ -325,6 +334,7 @@ describe('SessionManagerService', () => {
     DisconnectReason.loggedOut,
     DisconnectReason.connectionReplaced,
     DisconnectReason.badSession,
+    DisconnectReason.multideviceMismatch,
     DisconnectReason.forbidden,
   ])(
     'does not retry or delete credentials after terminal disconnect %s',
@@ -341,7 +351,8 @@ describe('SessionManagerService', () => {
       expect(manager.snapshot('one').lastDisconnectCode).toBe(code);
       expect(manager.snapshot('one').requiresPairing).toBe(
         code === DisconnectReason.loggedOut ||
-          code === DisconnectReason.badSession,
+          code === DisconnectReason.badSession ||
+          code === DisconnectReason.multideviceMismatch,
       );
     },
   );
@@ -524,5 +535,594 @@ describe('SessionManagerService', () => {
     expect(sockets[0]!.logout).not.toHaveBeenCalled();
     expect(contexts[0]!.close).toHaveBeenCalledOnce();
     await expect(manager.start('one')).rejects.toThrow('shutting down');
+  });
+  it('respects disabled sessions and explicitly enables a manual start', async () => {
+    Object.assign(rows.get('one')!, { enabled: false, retryCount: 2 });
+    await manager.start('one');
+    expect(factory.create).not.toHaveBeenCalled();
+    await manager.start('one', true);
+    expect(rows.get('one')).toMatchObject({ enabled: true, retryCount: 0 });
+    expect(manager.snapshot('one').retryCount).toBe(0);
+    expect(factory.create).toHaveBeenCalledOnce();
+  });
+
+  it('enforces the session limit without allocating another socket', async () => {
+    for (let index = 0; index < config.whatsapp.maxSessions; index++) {
+      const id = 'session-' + index;
+      rows.set(id, row(id));
+      await manager.start(id);
+    }
+    await expect(manager.start('one')).rejects.toThrow('Session limit reached');
+    expect(factory.create).toHaveBeenCalledTimes(config.whatsapp.maxSessions);
+  });
+
+  it.each(['start', 'restart'] as const)(
+    'rejects %s after logout',
+    async (action) => {
+      rows.get('one')!.status = 'LOGGED_OUT';
+      await expect(manager[action]('one')).rejects.toThrow(
+        'Pairing is required',
+      );
+      expect(factory.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects restart and pairing during shutdown', async () => {
+    await manager.onModuleDestroy();
+    await expect(manager.restart('one')).rejects.toThrow('shutting down');
+    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
+      'shutting down',
+    );
+    await manager.onApplicationBootstrap();
+    expect(repository.recoverable).not.toHaveBeenCalled();
+  });
+
+  it.each(['authentication', 'socket'])(
+    'stops safely when %s initialization fails',
+    async (failure) => {
+      if (failure === 'authentication')
+        authStore.open.mockRejectedValueOnce(new Error('auth'));
+      else
+        factory.create.mockImplementationOnce(() => {
+          throw new Error('socket');
+        });
+      await expect(manager.start('one')).rejects.toThrow(
+        'Session initialization failed',
+      );
+      expect(manager.snapshot('one')).toMatchObject({
+        status: 'FAILED',
+        reason: 'INTERNAL_ERROR',
+        nextRetryAt: null,
+      });
+      expect(authStore.clear).not.toHaveBeenCalled();
+      if (failure === 'socket')
+        expect(contexts[0]!.close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('closes authentication opened after shutdown began without creating a socket', async () => {
+    const open = authStore.open.getMockImplementation() as (
+      id: string,
+    ) => Promise<AuthContext>;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    authStore.open.mockImplementationOnce(async (id: string) => {
+      await gate;
+      return open(id);
+    });
+    const starting = manager.start('one');
+    await settle();
+    const stopping = manager.onModuleDestroy();
+    release();
+    await Promise.all([starting, stopping]);
+    expect(factory.create).not.toHaveBeenCalled();
+    expect(contexts[0]!.close).toHaveBeenCalledOnce();
+  });
+
+  it('ignores stale credential listeners after a restart', async () => {
+    await manager.start('one');
+    const stale = sockets[0]!.ev.listeners('creds.update')[0]!;
+    await manager.restart('one');
+    stale({ registered: true });
+    await settle();
+    expect(contexts[0]!.saveCreds).not.toHaveBeenCalled();
+    expect(contexts[1]!.state.creds.registered).toBe(false);
+  });
+
+  it('rechecks generation when an event reaches the queue after restart', async () => {
+    await manager.start('one');
+    const emitter = sockets[0]!.ev;
+    const restarting = manager.restart('one');
+    emitter.emit('connection.update', close(DisconnectReason.loggedOut));
+    await restarting;
+    await settle();
+    expect(manager.snapshot('one').status).toBe('CONNECTING');
+    expect(sockets[1]!.end).not.toHaveBeenCalled();
+  });
+
+  it('stops on credential save rejection and reports failure persistence errors', async () => {
+    await manager.start('one');
+    vi.mocked(contexts[0]!.saveCreds).mockRejectedValueOnce(new Error('write'));
+    repository.transition.mockRejectedValueOnce(new Error('database'));
+    sockets[0]!.ev.emit('creds.update', { registered: true });
+    await settle();
+    expect(manager.snapshot('one').status).toBe('FAILED');
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'failure_state_write_failed' }),
+    );
+    expect(authStore.clear).not.toHaveBeenCalled();
+  });
+
+  it('reports connection event persistence failures without unhandled rejections', async () => {
+    await manager.start('one');
+    repository.transition.mockRejectedValue(new Error('database'));
+    await event(0, close(DisconnectReason.connectionLost));
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'connection_event_failed' }),
+    );
+    expect(manager.snapshot('one').status).toBe('FAILED');
+  });
+
+  it('handles cleanup failure while entering the failed state', async () => {
+    await manager.start('one');
+    vi.mocked(contexts[0]!.close).mockRejectedValueOnce(new Error('flush'));
+    const onFailure = authStore.open.mock.calls[0]![1] as () => void;
+    onFailure();
+    await settle();
+    expect(manager.snapshot('one').status).toBe('FAILED');
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'cleanup_failed' }),
+    );
+  });
+
+  it('does not duplicate a reconnect while one is scheduled and reports failed recreation', async () => {
+    await manager.start('one');
+    await event(0, close(DisconnectReason.connectionLost));
+    await manager.start('one');
+    expect(factory.create).toHaveBeenCalledOnce();
+    factory.create.mockImplementationOnce(() => {
+      throw new Error('socket');
+    });
+    await vi.advanceTimersByTimeAsync(750);
+    expect(manager.snapshot('one').status).toBe('FAILED');
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'reconnect_failed' }),
+    );
+  });
+
+  it.each(['missing identity', 'invalid phone', 'different phone'])(
+    'rejects an open socket with %s',
+    async (scenario) => {
+      if (scenario !== 'missing identity') authenticated.add('one');
+      await manager.start('one');
+      if (scenario === 'invalid phone')
+        contexts[0]!.state.creds.me!.id = 'invalid@s.whatsapp.net';
+      if (scenario === 'different phone')
+        rows.get('one')!.phone = '989189876543';
+      await event(0, { connection: 'open' });
+      expect(manager.snapshot('one')).toMatchObject({
+        status: 'FAILED',
+        connected: false,
+      });
+      expect(authStore.clear).not.toHaveBeenCalled();
+    },
+  );
+
+  it('ignores QR updates for an authenticated identity', async () => {
+    authenticated.add('one');
+    await manager.start('one');
+    await event(0, { qr: 'secret' });
+    expect(manager.pairing('one').qr).toBeNull();
+    expect(manager.snapshot('one').status).toBe('CONNECTING');
+  });
+
+  it.each(['restart', 'stop'] as const)(
+    'aborts %s when authentication cleanup fails',
+    async (action) => {
+      await manager.start('one');
+      vi.mocked(contexts[0]!.close).mockRejectedValueOnce(new Error('flush'));
+      await expect(manager[action]('one')).rejects.toThrow(
+        'Authentication cleanup failed',
+      );
+      expect(manager.snapshot('one').status).toBe('FAILED');
+      expect(factory.create).toHaveBeenCalledOnce();
+      expect(authStore.clear).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps logout status on manual stop', async () => {
+    rows.get('one')!.status = 'LOGGED_OUT';
+    await manager.stop('one');
+    expect(manager.snapshot('one')).toMatchObject({
+      status: 'LOGGED_OUT',
+      reason: 'LOGGED_OUT',
+    });
+    expect(factory.create).not.toHaveBeenCalled();
+  });
+
+  it('requires a connected authenticated socket for remote logout', async () => {
+    await expect(manager.logout('one')).rejects.toThrow('Connect the session');
+    await manager.start('one');
+    await expect(manager.logout('one')).rejects.toThrow('Connect the session');
+    sockets[0]!.ev.emit('creds.update', {
+      me: { id: '989121234567@s.whatsapp.net' },
+    });
+    await expect(manager.logout('one')).rejects.toThrow('Connect the session');
+    expect(authStore.clear).not.toHaveBeenCalled();
+  });
+
+  it('retains authentication if cleanup fails after confirmed remote logout', async () => {
+    authenticated.add('one');
+    await manager.start('one');
+    await event(0, { connection: 'open' });
+    vi.mocked(contexts[0]!.close).mockRejectedValueOnce(new Error('flush'));
+    await expect(manager.logout('one')).rejects.toThrow('cleanup failed');
+    expect(authStore.clear).not.toHaveBeenCalled();
+  });
+
+  it('removes a session locally and cancels its retries without remote logout', async () => {
+    await manager.start('one');
+    await event(0, close(DisconnectReason.connectionLost));
+    await manager.remove('one');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(repository.remove).toHaveBeenCalledWith('one');
+    expect(rows.has('one')).toBe(false);
+    expect(manager.snapshot('one')).toMatchObject({
+      generation: 0,
+      retryCount: 0,
+    });
+    expect(sockets[0]!.logout).not.toHaveBeenCalled();
+    expect(factory.create).toHaveBeenCalledOnce();
+  });
+
+  it('retains the session record if cleanup during removal fails', async () => {
+    await manager.start('one');
+    vi.mocked(contexts[0]!.close).mockRejectedValueOnce(new Error('flush'));
+    await expect(manager.remove('one')).rejects.toThrow('cleanup failed');
+    expect(repository.remove).not.toHaveBeenCalled();
+    expect(rows.get('one')!.enabled).toBe(false);
+    expect(authStore.clear).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    DisconnectReason.badSession,
+    DisconnectReason.multideviceMismatch,
+    DisconnectReason.forbidden,
+  ])(
+    'clears known invalid credentials %s only on explicit pairing',
+    async (code) => {
+      authenticated.add('one');
+      await manager.start('one');
+      await event(0, close(code));
+      expect(authStore.clear).not.toHaveBeenCalled();
+      await manager.preparePairing('one', 'QR');
+      expect(authStore.clear).toHaveBeenCalledWith('one');
+      expect(factory.create).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('rejects pairing on an authenticated live session', async () => {
+    authenticated.add('one');
+    await manager.start('one');
+    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
+      'already authenticated',
+    );
+    expect(authStore.clear).not.toHaveBeenCalled();
+  });
+
+  it('rejects pairing while authentication is in progress', async () => {
+    await manager.start('one');
+    await event(0, { isNewLogin: true });
+    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
+      'in progress',
+    );
+  });
+
+  it('prevents changing the session phone during pairing', async () => {
+    rows.get('one')!.phone = '989121234567';
+    await expect(
+      manager.preparePairing('one', 'CODE', '989189876543'),
+    ).rejects.toThrow('cannot be changed');
+    expect(factory.create).not.toHaveBeenCalled();
+  });
+
+  it('rechecks identity when authentication is opened for pairing', async () => {
+    authStore.hasIdentity.mockResolvedValueOnce(false);
+    authenticated.add('one');
+    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
+      'use reconnect',
+    );
+  });
+
+  it('requires a runtime before requesting a code', async () => {
+    await expect(
+      manager.requestPairingCode('one', '989121234567'),
+    ).rejects.toThrow('Start pairing first');
+  });
+
+  it('times out code requests without blocking the event queue', async () => {
+    await manager.preparePairing('one', 'CODE');
+    const pending = expect(
+      manager.requestPairingCode('one', '989121234567'),
+    ).rejects.toThrow('not ready');
+    await vi.advanceTimersByTimeAsync(60000);
+    await pending;
+    expect(sockets[0]!.requestPairingCode).not.toHaveBeenCalled();
+  });
+
+  it('rejects a pending code request when its connection changes', async () => {
+    await manager.preparePairing('one', 'CODE');
+    const pending = expect(
+      manager.requestPairingCode('one', '989121234567'),
+    ).rejects.toThrow('connection changed');
+    await manager.restart('one');
+    await vi.advanceTimersByTimeAsync(50);
+    await pending;
+    expect(sockets[1]!.requestPairingCode).not.toHaveBeenCalled();
+  });
+
+  it('rejects code requests on a QR pairing session', async () => {
+    await manager.start('one');
+    await event(0, { connection: 'connecting' });
+    await expect(
+      manager.requestPairingCode('one', '989121234567'),
+    ).rejects.toThrow('connection changed');
+  });
+
+  it('rejects code requests once the session has authenticated', async () => {
+    await manager.preparePairing('one', 'CODE');
+    await event(0, { connection: 'connecting' });
+    sockets[0]!.ev.emit('creds.update', {
+      me: { id: '989121234567@s.whatsapp.net' },
+    });
+    await expect(
+      manager.requestPairingCode('one', '989121234567'),
+    ).rejects.toThrow('already authenticated');
+  });
+
+  it('renews an expired pairing code and persists its credentials', async () => {
+    await manager.preparePairing('one', 'CODE');
+    await event(0, { connection: 'connecting' });
+    await manager.requestPairingCode('one', '989121234567');
+    await vi.advanceTimersByTimeAsync(config.whatsapp.pairingCodeTtlMs);
+    sockets[0]!.requestPairingCode.mockResolvedValueOnce('NEWCODE1');
+    expect((await manager.requestPairingCode('one', '989121234567')).code).toBe(
+      'NEWCODE1',
+    );
+    expect(sockets[0]!.requestPairingCode).toHaveBeenCalledTimes(2);
+    expect(contexts[0]!.saveCreds).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not expose a code if its credentials cannot be persisted', async () => {
+    await manager.preparePairing('one', 'CODE');
+    await event(0, { connection: 'connecting' });
+    vi.mocked(contexts[0]!.saveCreds).mockRejectedValueOnce(new Error('write'));
+    await expect(
+      manager.requestPairingCode('one', '989121234567'),
+    ).rejects.toThrow('write');
+    expect(manager.snapshot('one').status).toBe('CONNECTING');
+  });
+
+  it('recovers a stuck connection only after the watchdog deadline', async () => {
+    await manager.start('one');
+    await manager.inspectConnections();
+    expect(manager.snapshot('one').retryCount).toBe(0);
+    await vi.advanceTimersByTimeAsync(config.whatsapp.connectionStuckMs);
+    await manager.inspectConnections();
+    expect(manager.snapshot('one')).toMatchObject({
+      status: 'RECONNECTING',
+      reason: 'CONNECTION_STUCK',
+      retryCount: 1,
+    });
+  });
+
+  it('ignores pairing and intentionally stopped sessions in the watchdog', async () => {
+    await manager.start('one');
+    await event(0, { qr: 'qr' });
+    await vi.advanceTimersByTimeAsync(config.whatsapp.connectionStuckMs);
+    await manager.inspectConnections();
+    expect(manager.snapshot('one').status).toBe('AWAITING_PAIRING');
+    await manager.stop('one');
+    await manager.inspectConnections();
+    expect(factory.create).toHaveBeenCalledOnce();
+  });
+
+  it('continues startup recovery after one session fails', async () => {
+    rows.set('two', row('two'));
+    authStore.open.mockRejectedValueOnce(new Error('auth'));
+    await manager.onApplicationBootstrap();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'startup_restore_failed' }),
+    );
+    expect(factory.create).toHaveBeenCalledOnce();
+    await event(0, { qr: 'qr' });
+  });
+
+  it('recovers handshakes that exhaust their startup deadline', async () => {
+    await manager.onApplicationBootstrap();
+    await vi.advanceTimersByTimeAsync(config.whatsapp.connectionStuckMs);
+    expect(manager.snapshot('one')).toMatchObject({
+      status: 'RECONNECTING',
+      reason: 'CONNECTION_STUCK',
+    });
+  });
+
+  it('aborts staggered startup recovery on shutdown', async () => {
+    rows.set('two', row('two'));
+    await manager.onApplicationBootstrap();
+    await settle();
+    await manager.onModuleDestroy();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(factory.create).toHaveBeenCalledOnce();
+  });
+
+  it('logs shutdown flush errors and still clears runtime state', async () => {
+    await manager.start('one');
+    vi.mocked(contexts[0]!.close).mockRejectedValueOnce(new Error('flush'));
+    await manager.onModuleDestroy();
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'shutdown_auth_flush_failed' }),
+    );
+    expect(manager.snapshot('one').generation).toBe(0);
+  });
+
+  it('ignores authentication failures reported by an old generation', async () => {
+    await manager.start('one');
+    const stale = authStore.open.mock.calls[0]![1] as () => void;
+    await manager.restart('one');
+    stale();
+    await settle();
+    expect(manager.snapshot('one').status).toBe('CONNECTING');
+    expect(sockets[1]!.end).not.toHaveBeenCalled();
+  });
+
+  it('reuses a live pairing socket when explicitly preparing pairing again', async () => {
+    await manager.preparePairing('one', 'QR');
+    await manager.preparePairing('one', 'CODE');
+    expect(factory.create).toHaveBeenCalledOnce();
+    await event(0, { connection: 'connecting' });
+    expect((await manager.requestPairingCode('one', '989121234567')).code).toBe(
+      'ABCD1234',
+    );
+  });
+
+  it('rejects pairing if the persisted record already marks a live socket as connected', async () => {
+    await manager.start('one');
+    rows.get('one')!.status = 'CONNECTED';
+    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
+      'already authenticated',
+    );
+  });
+
+  it('does not reset retries before stability and resets them only once after stability', async () => {
+    authenticated.add('one');
+    rows.get('one')!.retryCount = 2;
+    await manager.start('one');
+    await event(0, { connection: 'open' });
+    await manager.inspectConnections();
+    expect(manager.snapshot('one').retryCount).toBe(2);
+    await vi.advanceTimersByTimeAsync(config.whatsapp.stableConnectionMs);
+    await manager.inspectConnections();
+    repository.update.mockClear();
+    await manager.inspectConnections();
+    expect(manager.snapshot('one').retryCount).toBe(0);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('does not create a socket if shutdown begins during a manual start database write', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    repository.update.mockImplementationOnce(async () => {
+      await gate;
+      return rows.get('one');
+    });
+    const starting = manager.start('one', true);
+    await settle();
+    const stopping = manager.onModuleDestroy();
+    release();
+    await Promise.all([starting, stopping]);
+    expect(factory.create).not.toHaveBeenCalled();
+  });
+
+  it('does not schedule reconnection when shutdown begins during disconnect persistence', async () => {
+    await manager.start('one');
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    repository.transition.mockImplementationOnce(async () => {
+      await gate;
+      return rows.get('one');
+    });
+    sockets[0]!.ev.emit(
+      'connection.update',
+      close(DisconnectReason.connectionLost),
+    );
+    await settle();
+    const stopping = manager.onModuleDestroy();
+    release();
+    await stopping;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(factory.create).toHaveBeenCalledOnce();
+  });
+
+  it('fences an already-queued retry when manual restart changes its generation', async () => {
+    await manager.start('one');
+    await event(0, close(DisconnectReason.connectionLost));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    repository.require.mockImplementationOnce(async () => {
+      await gate;
+      return { ...rows.get('one')! };
+    });
+    const restarting = manager.restart('one');
+    await settle();
+    await vi.advanceTimersByTimeAsync(750);
+    release();
+    await restarting;
+    await settle();
+    expect(factory.create).toHaveBeenCalledTimes(2);
+    expect(manager.snapshot('one').status).toBe('CONNECTING');
+  });
+
+  it('allows a failed pairing code request to be retried at the rate-limit boundary', async () => {
+    await manager.preparePairing('one', 'CODE');
+    await event(0, { connection: 'connecting' });
+    sockets[0]!.requestPairingCode.mockRejectedValueOnce(new Error('request'));
+    await expect(
+      manager.requestPairingCode('one', '989121234567'),
+    ).rejects.toThrow('Unable to request');
+    await vi.advanceTimersByTimeAsync(config.whatsapp.pairingRateLimitMs);
+    expect((await manager.requestPairingCode('one', '989121234567')).code).toBe(
+      'ABCD1234',
+    );
+  });
+
+  it('rejects a missing session without opening authentication', async () => {
+    repository.require.mockRejectedValueOnce(new Error('Session not found'));
+    await expect(manager.start('missing')).rejects.toThrow('Session not found');
+    expect(authStore.open).not.toHaveBeenCalled();
+  });
+
+  it('propagates failed deletion while keeping the disabled session recoverable for administration', async () => {
+    await manager.start('one');
+    repository.remove.mockRejectedValueOnce(new Error('database'));
+    await expect(manager.remove('one')).rejects.toThrow('database');
+    expect(rows.has('one')).toBe(true);
+    expect(rows.get('one')!.enabled).toBe(false);
+    expect(sockets[0]!.logout).not.toHaveBeenCalled();
+  });
+
+  it('propagates authentication deletion failure after remote logout confirmation', async () => {
+    authenticated.add('one');
+    await manager.start('one');
+    await event(0, { connection: 'open' });
+    authStore.clear.mockRejectedValueOnce(new Error('delete'));
+    await expect(manager.logout('one')).rejects.toThrow('delete');
+    expect(sockets[0]!.logout).toHaveBeenCalledOnce();
+    expect(rows.get('one')!.enabled).toBe(false);
+    expect(rows.get('one')!.status).not.toBe('LOGGED_OUT');
+  });
+  it('contains an unexpected startup worker failure without rejecting application bootstrap', async () => {
+    authStore.open.mockRejectedValueOnce(
+      new Error('authentication unavailable'),
+    );
+    loggerError.mockImplementationOnce(() => {
+      throw new Error('logging backend unavailable');
+    });
+    await expect(manager.onApplicationBootstrap()).resolves.toBeUndefined();
+    await settle();
+    expect(loggerError).toHaveBeenCalledWith({
+      event: 'startup_recovery_failed',
+    });
+    expect(manager.snapshot('one').status).toBe('FAILED');
+    expect(authStore.clear).not.toHaveBeenCalled();
   });
 });

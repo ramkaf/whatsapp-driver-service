@@ -1,4 +1,3 @@
-
 import { Injectable } from '@nestjs/common';
 import {
   proto,
@@ -40,9 +39,7 @@ export class AuthStateKeyStore implements SignalKeyStore {
       const values: Record<string, SignalDataTypeMap[T]> = {};
 
       for (const row of rows) {
-        let value = AuthStateSerializer.decode<
-          SignalDataTypeMap[T]
-        >(row.value);
+        let value = AuthStateSerializer.decode<SignalDataTypeMap[T]>(row.value);
 
         if (type === 'app-state-sync-key') {
           value = proto.Message.AppStateSyncKeyData.fromObject(
@@ -59,16 +56,12 @@ export class AuthStateKeyStore implements SignalKeyStore {
 
   set(data: SignalDataSet): Promise<void> {
     // Snapshot values before entering the queue.
-    const entries = Object.entries(data).flatMap(
-      ([type, keys]) =>
-        Object.entries(keys ?? {}).map(([keyId, value]) => ({
-          type,
-          keyId,
-          value:
-            value == null
-              ? null
-              : AuthStateSerializer.encode(value),
-        })),
+    const entries = Object.entries(data).flatMap(([type, keys]) =>
+      Object.entries(keys ?? {}).map(([keyId, value]) => ({
+        type,
+        keyId,
+        value: value == null ? null : AuthStateSerializer.encode(value),
+      })),
     );
 
     if (entries.length === 0) {
@@ -76,34 +69,32 @@ export class AuthStateKeyStore implements SignalKeyStore {
     }
 
     return this.queue.run(async () => {
-      const operations = entries.map(
-        ({ type, keyId, value }) => {
-          const where = {
-            sessionId: this.sessionId,
-            type,
-            keyId,
-          };
+      const operations = entries.map(({ type, keyId, value }) => {
+        const where = {
+          sessionId: this.sessionId,
+          type,
+          keyId,
+        };
 
-          if (value === null) {
-            return this.prisma.waAuthKey.deleteMany({
-              where,
-            });
-          }
-
-          return this.prisma.waAuthKey.upsert({
-            where: {
-              sessionId_type_keyId: where,
-            },
-            create: {
-              ...where,
-              value,
-            },
-            update: {
-              value,
-            },
+        if (value === null) {
+          return this.prisma.waAuthKey.deleteMany({
+            where,
           });
-        },
-      );
+        }
+
+        return this.prisma.waAuthKey.upsert({
+          where: {
+            sessionId_type_keyId: where,
+          },
+          create: {
+            ...where,
+            value,
+          },
+          update: {
+            value,
+          },
+        });
+      });
 
       await this.prisma.$transaction(operations);
     });
