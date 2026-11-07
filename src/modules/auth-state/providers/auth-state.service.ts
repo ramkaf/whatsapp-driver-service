@@ -7,7 +7,6 @@ import {
 } from '@whiskeysockets/baileys';
 
 import {
-  Prisma,
   PrismaService,
 } from '@libs/prisma';
 

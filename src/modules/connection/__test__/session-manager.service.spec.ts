@@ -15,9 +15,9 @@ import { ConnectionSupervisorService } from '../providers/connection-supervisor.
 import type { SessionRepository } from '../../sessions/session.repository.ts';
 import type {
   AuthStateService,
-  AuthContext,
 } from '../../auth-state/providers/auth-state.service.ts';
 import type { SocketFactoryService } from '../providers/socket-factory.service.ts';
+import { AuthContext } from '../../auth-state/context/auth-state.context.ts';
 
 vi.mock('node:timers/promises', () => ({
   setTimeout: (

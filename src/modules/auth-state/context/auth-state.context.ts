@@ -3,7 +3,7 @@ import {
   type AuthenticationState,
 } from '@whiskeysockets/baileys';
 
-import { PrismaService, Prisma } from '@libs/prisma';
+import { PrismaService } from '@libs/prisma';
 
 import { AuthStateQueue } from '../infrastructure/auth-state.queue.ts';
 import { AuthStateKeyStore } from '../repository/auth-state.key-store.ts';
