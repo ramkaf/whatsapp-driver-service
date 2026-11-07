@@ -81,6 +81,17 @@ describe('application configuration', () => {
     expect(() => validateEnvironment({ [key]: value })).toThrow(key);
   });
 
+  it.each([
+    ['WA_MAX_SESSIONS', '51'],
+    ['WA_MAX_RETRIES', '0'],
+    ['WA_STARTUP_CONCURRENCY', '6'],
+    ['WA_WATCHDOG_INTERVAL_MS', '0'],
+    ['WA_PAIRING_TTL_MS', '60001'],
+    ['WA_ADMIN_API_KEY', 'short-secret'],
+  ])('rejects invalid WhatsApp configuration %s', (key, value) => {
+    expect(() => validateEnvironment({ [key]: value })).toThrow(key);
+  });
+
   it('resolves a MySQL URL and rejects unsupported database protocols', () => {
     expect(configuer().databaseUrl).toBe(
       'mysql://test_user:test_password@localhost:3306/whatsapp',

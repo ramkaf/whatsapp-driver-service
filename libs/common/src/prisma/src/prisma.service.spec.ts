@@ -116,7 +116,7 @@ describe('PrismaService', () => {
     const error = new Error('Disconnect failed');
     vi.spyOn(service, '$disconnect').mockRejectedValue(error);
 
-    await expect(service.onModuleDestroy()).rejects.toBe(error);
+    await expect(service.onApplicationShutdown()).rejects.toBe(error);
 
     expect(logs.error).toHaveBeenCalledWith('Database disconnect failed');
     expect(logs.log).not.toHaveBeenCalledWith('Database disconnected');

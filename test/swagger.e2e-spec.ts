@@ -1,0 +1,82 @@
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
+import { SessionsController } from '../src/modules/sessions/sessions/sessions.controller.ts';
+import { SessionsService } from '../src/modules/sessions/sessions/sessions.service.ts';
+import { PairingService } from '../src/modules/pairing/pairing/pairing.service.ts';
+import { HealthController } from '../src/modules/monitoring/health.controller.ts';
+import { AdminGuard } from '../src/modules/sessions/admin.guard.ts';
+import { setupSwagger } from '../src/swagger/setup-swagger.ts';
+
+describe('Swagger (e2e)', () => {
+  it.each(['', 'api'])(
+    'serves docs and documents real API paths with prefix %j',
+    async (prefix) => {
+      const module = await Test.createTestingModule({
+        controllers: [SessionsController, HealthController],
+        providers: [
+          { provide: SessionsService, useValue: { list: async () => [] } },
+          { provide: PairingService, useValue: {} },
+        ],
+      })
+        .overrideGuard(AdminGuard)
+        .useValue({ canActivate: () => true })
+        .compile();
+      const app = module.createNestApplication();
+      app.setGlobalPrefix(prefix);
+      const document = setupSwagger(app);
+      await app.init();
+      try {
+        const base = prefix ? `/${prefix}` : '';
+        expect(Object.keys(document.paths)).toHaveLength(10);
+        expect(document.paths[`${base}/sessions`]!.get!.security).toEqual([
+          { 'admin-token': [] },
+        ]);
+        expect(document.paths[`${base}/health`]!.get!.security).toEqual([
+          { 'admin-token': [] },
+        ]);
+        expect(
+          document.components!.securitySchemes!['admin-token'],
+        ).toMatchObject({ type: 'http', scheme: 'bearer' });
+        const body = document.paths[`${base}/sessions`]!.post!.requestBody;
+        expect(body).toHaveProperty(
+          'content.application/json.examples.code.value.pairingMethod',
+          'CODE',
+        );
+        expect(body).toHaveProperty(
+          'content.application/json.examples.qr.value.pairingMethod',
+          'QR',
+        );
+        expect(document.components!.schemas!.SessionResponseDto).toHaveProperty(
+          'properties.runtime',
+        );
+        expect(
+          document.components!.schemas!.SessionResponseDto,
+        ).not.toHaveProperty('properties.authCreds');
+        expect(
+          document.components!.schemas!.SessionResponseDto,
+        ).not.toHaveProperty('properties.authKeys');
+        expect(
+          document.paths[`${base}/sessions/{id}`]!.delete!.responses,
+        ).toHaveProperty('204');
+        expect(
+          document.paths[`${base}/sessions/{id}/pairing-code`]!.post!.responses,
+        ).toHaveProperty('429');
+        expect(
+          document.paths[`${base}/sessions`]!.get!.parameters ?? [],
+        ).toHaveLength(0);
+        const ui = await request(app.getHttpServer()).get('/docs/').expect(200);
+        expect(ui.text).toContain('swagger-ui');
+        const json = await request(app.getHttpServer())
+          .get('/docs-json')
+          .expect(200);
+        expect(json.body.paths).toHaveProperty(`${base}/sessions`);
+        await request(app.getHttpServer())
+          .get(`${base}/sessions`)
+          .expect(200)
+          .expect([]);
+      } finally {
+        await app.close();
+      }
+    },
+  );
+});

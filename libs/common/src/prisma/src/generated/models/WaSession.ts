@@ -39,6 +39,8 @@ export type WaSessionSumAggregateOutputType = {
 export type WaSessionMinAggregateOutputType = {
   id: string | null;
   name: string | null;
+  enabled: boolean | null;
+  pairingMethod: $Enums.WaPairingMethod | null;
   phone: string | null;
   status: $Enums.WaSessionStatus | null;
   retryCount: number | null;
@@ -55,6 +57,8 @@ export type WaSessionMinAggregateOutputType = {
 export type WaSessionMaxAggregateOutputType = {
   id: string | null;
   name: string | null;
+  enabled: boolean | null;
+  pairingMethod: $Enums.WaPairingMethod | null;
   phone: string | null;
   status: $Enums.WaSessionStatus | null;
   retryCount: number | null;
@@ -71,6 +75,8 @@ export type WaSessionMaxAggregateOutputType = {
 export type WaSessionCountAggregateOutputType = {
   id: number;
   name: number;
+  enabled: number;
+  pairingMethod: number;
   phone: number;
   status: number;
   retryCount: number;
@@ -98,6 +104,8 @@ export type WaSessionSumAggregateInputType = {
 export type WaSessionMinAggregateInputType = {
   id?: true;
   name?: true;
+  enabled?: true;
+  pairingMethod?: true;
   phone?: true;
   status?: true;
   retryCount?: true;
@@ -114,6 +122,8 @@ export type WaSessionMinAggregateInputType = {
 export type WaSessionMaxAggregateInputType = {
   id?: true;
   name?: true;
+  enabled?: true;
+  pairingMethod?: true;
   phone?: true;
   status?: true;
   retryCount?: true;
@@ -130,6 +140,8 @@ export type WaSessionMaxAggregateInputType = {
 export type WaSessionCountAggregateInputType = {
   id?: true;
   name?: true;
+  enabled?: true;
+  pairingMethod?: true;
   phone?: true;
   status?: true;
   retryCount?: true;
@@ -240,6 +252,8 @@ export type WaSessionGroupByArgs<
 export type WaSessionGroupByOutputType = {
   id: string;
   name: string;
+  enabled: boolean;
+  pairingMethod: $Enums.WaPairingMethod;
   phone: string | null;
   status: $Enums.WaSessionStatus;
   retryCount: number;
@@ -277,6 +291,9 @@ export type WaSessionWhereInput = {
   NOT?: Prisma.WaSessionWhereInput | Prisma.WaSessionWhereInput[];
   id?: Prisma.StringFilter<'WaSession'> | string;
   name?: Prisma.StringFilter<'WaSession'> | string;
+  enabled?: Prisma.BoolFilter<'WaSession'> | boolean;
+  pairingMethod?:
+    Prisma.EnumWaPairingMethodFilter<'WaSession'> | $Enums.WaPairingMethod;
   phone?: Prisma.StringNullableFilter<'WaSession'> | string | null;
   status?:
     Prisma.EnumWaSessionStatusFilter<'WaSession'> | $Enums.WaSessionStatus;
@@ -303,6 +320,8 @@ export type WaSessionWhereInput = {
 export type WaSessionOrderByWithRelationInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  enabled?: Prisma.SortOrder;
+  pairingMethod?: Prisma.SortOrder;
   phone?: Prisma.SortOrderInput | Prisma.SortOrder;
   status?: Prisma.SortOrder;
   retryCount?: Prisma.SortOrder;
@@ -328,6 +347,9 @@ export type WaSessionWhereUniqueInput = Prisma.AtLeast<
     OR?: Prisma.WaSessionWhereInput[];
     NOT?: Prisma.WaSessionWhereInput | Prisma.WaSessionWhereInput[];
     name?: Prisma.StringFilter<'WaSession'> | string;
+    enabled?: Prisma.BoolFilter<'WaSession'> | boolean;
+    pairingMethod?:
+      Prisma.EnumWaPairingMethodFilter<'WaSession'> | $Enums.WaPairingMethod;
     status?:
       Prisma.EnumWaSessionStatusFilter<'WaSession'> | $Enums.WaSessionStatus;
     retryCount?: Prisma.IntFilter<'WaSession'> | number;
@@ -355,6 +377,8 @@ export type WaSessionWhereUniqueInput = Prisma.AtLeast<
 export type WaSessionOrderByWithAggregationInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  enabled?: Prisma.SortOrder;
+  pairingMethod?: Prisma.SortOrder;
   phone?: Prisma.SortOrderInput | Prisma.SortOrder;
   status?: Prisma.SortOrder;
   retryCount?: Prisma.SortOrder;
@@ -383,6 +407,10 @@ export type WaSessionScalarWhereWithAggregatesInput = {
     | Prisma.WaSessionScalarWhereWithAggregatesInput[];
   id?: Prisma.StringWithAggregatesFilter<'WaSession'> | string;
   name?: Prisma.StringWithAggregatesFilter<'WaSession'> | string;
+  enabled?: Prisma.BoolWithAggregatesFilter<'WaSession'> | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodWithAggregatesFilter<'WaSession'>
+    | $Enums.WaPairingMethod;
   phone?:
     Prisma.StringNullableWithAggregatesFilter<'WaSession'> | string | null;
   status?:
@@ -417,6 +445,8 @@ export type WaSessionScalarWhereWithAggregatesInput = {
 export type WaSessionCreateInput = {
   id?: string;
   name: string;
+  enabled?: boolean;
+  pairingMethod?: $Enums.WaPairingMethod;
   phone?: string | null;
   status?: $Enums.WaSessionStatus;
   retryCount?: number;
@@ -436,6 +466,8 @@ export type WaSessionCreateInput = {
 export type WaSessionUncheckedCreateInput = {
   id?: string;
   name: string;
+  enabled?: boolean;
+  pairingMethod?: $Enums.WaPairingMethod;
   phone?: string | null;
   status?: $Enums.WaSessionStatus;
   retryCount?: number;
@@ -455,6 +487,10 @@ export type WaSessionUncheckedCreateInput = {
 export type WaSessionUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -480,6 +516,10 @@ export type WaSessionUpdateInput = {
 export type WaSessionUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -505,6 +545,8 @@ export type WaSessionUncheckedUpdateInput = {
 export type WaSessionCreateManyInput = {
   id?: string;
   name: string;
+  enabled?: boolean;
+  pairingMethod?: $Enums.WaPairingMethod;
   phone?: string | null;
   status?: $Enums.WaSessionStatus;
   retryCount?: number;
@@ -521,6 +563,10 @@ export type WaSessionCreateManyInput = {
 export type WaSessionUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -543,6 +589,10 @@ export type WaSessionUpdateManyMutationInput = {
 export type WaSessionUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -573,6 +623,8 @@ export type WaSessionOrderByRelevanceInput = {
 export type WaSessionCountOrderByAggregateInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  enabled?: Prisma.SortOrder;
+  pairingMethod?: Prisma.SortOrder;
   phone?: Prisma.SortOrder;
   status?: Prisma.SortOrder;
   retryCount?: Prisma.SortOrder;
@@ -594,6 +646,8 @@ export type WaSessionAvgOrderByAggregateInput = {
 export type WaSessionMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  enabled?: Prisma.SortOrder;
+  pairingMethod?: Prisma.SortOrder;
   phone?: Prisma.SortOrder;
   status?: Prisma.SortOrder;
   retryCount?: Prisma.SortOrder;
@@ -610,6 +664,8 @@ export type WaSessionMaxOrderByAggregateInput = {
 export type WaSessionMinOrderByAggregateInput = {
   id?: Prisma.SortOrder;
   name?: Prisma.SortOrder;
+  enabled?: Prisma.SortOrder;
+  pairingMethod?: Prisma.SortOrder;
   phone?: Prisma.SortOrder;
   status?: Prisma.SortOrder;
   retryCount?: Prisma.SortOrder;
@@ -635,6 +691,14 @@ export type WaSessionScalarRelationFilter = {
 
 export type StringFieldUpdateOperationsInput = {
   set?: string;
+};
+
+export type BoolFieldUpdateOperationsInput = {
+  set?: boolean;
+};
+
+export type EnumWaPairingMethodFieldUpdateOperationsInput = {
+  set?: $Enums.WaPairingMethod;
 };
 
 export type NullableStringFieldUpdateOperationsInput = {
@@ -750,6 +814,8 @@ export type WaSessionUpdateOneRequiredWithoutEventsNestedInput = {
 export type WaSessionCreateWithoutAuthCredsInput = {
   id?: string;
   name: string;
+  enabled?: boolean;
+  pairingMethod?: $Enums.WaPairingMethod;
   phone?: string | null;
   status?: $Enums.WaSessionStatus;
   retryCount?: number;
@@ -768,6 +834,8 @@ export type WaSessionCreateWithoutAuthCredsInput = {
 export type WaSessionUncheckedCreateWithoutAuthCredsInput = {
   id?: string;
   name: string;
+  enabled?: boolean;
+  pairingMethod?: $Enums.WaPairingMethod;
   phone?: string | null;
   status?: $Enums.WaSessionStatus;
   retryCount?: number;
@@ -814,6 +882,10 @@ export type WaSessionUpdateToOneWithWhereWithoutAuthCredsInput = {
 export type WaSessionUpdateWithoutAuthCredsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -838,6 +910,10 @@ export type WaSessionUpdateWithoutAuthCredsInput = {
 export type WaSessionUncheckedUpdateWithoutAuthCredsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -862,6 +938,8 @@ export type WaSessionUncheckedUpdateWithoutAuthCredsInput = {
 export type WaSessionCreateWithoutAuthKeysInput = {
   id?: string;
   name: string;
+  enabled?: boolean;
+  pairingMethod?: $Enums.WaPairingMethod;
   phone?: string | null;
   status?: $Enums.WaSessionStatus;
   retryCount?: number;
@@ -880,6 +958,8 @@ export type WaSessionCreateWithoutAuthKeysInput = {
 export type WaSessionUncheckedCreateWithoutAuthKeysInput = {
   id?: string;
   name: string;
+  enabled?: boolean;
+  pairingMethod?: $Enums.WaPairingMethod;
   phone?: string | null;
   status?: $Enums.WaSessionStatus;
   retryCount?: number;
@@ -926,6 +1006,10 @@ export type WaSessionUpdateToOneWithWhereWithoutAuthKeysInput = {
 export type WaSessionUpdateWithoutAuthKeysInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -950,6 +1034,10 @@ export type WaSessionUpdateWithoutAuthKeysInput = {
 export type WaSessionUncheckedUpdateWithoutAuthKeysInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -974,6 +1062,8 @@ export type WaSessionUncheckedUpdateWithoutAuthKeysInput = {
 export type WaSessionCreateWithoutEventsInput = {
   id?: string;
   name: string;
+  enabled?: boolean;
+  pairingMethod?: $Enums.WaPairingMethod;
   phone?: string | null;
   status?: $Enums.WaSessionStatus;
   retryCount?: number;
@@ -992,6 +1082,8 @@ export type WaSessionCreateWithoutEventsInput = {
 export type WaSessionUncheckedCreateWithoutEventsInput = {
   id?: string;
   name: string;
+  enabled?: boolean;
+  pairingMethod?: $Enums.WaPairingMethod;
   phone?: string | null;
   status?: $Enums.WaSessionStatus;
   retryCount?: number;
@@ -1038,6 +1130,10 @@ export type WaSessionUpdateToOneWithWhereWithoutEventsInput = {
 export type WaSessionUpdateWithoutEventsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -1062,6 +1158,10 @@ export type WaSessionUpdateWithoutEventsInput = {
 export type WaSessionUncheckedUpdateWithoutEventsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string;
   name?: Prisma.StringFieldUpdateOperationsInput | string;
+  enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+  pairingMethod?:
+    | Prisma.EnumWaPairingMethodFieldUpdateOperationsInput
+    | $Enums.WaPairingMethod;
   phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     | Prisma.EnumWaSessionStatusFieldUpdateOperationsInput
@@ -1140,6 +1240,8 @@ export type WaSessionSelect<
   {
     id?: boolean;
     name?: boolean;
+    enabled?: boolean;
+    pairingMethod?: boolean;
     phone?: boolean;
     status?: boolean;
     retryCount?: boolean;
@@ -1162,6 +1264,8 @@ export type WaSessionSelect<
 export type WaSessionSelectScalar = {
   id?: boolean;
   name?: boolean;
+  enabled?: boolean;
+  pairingMethod?: boolean;
   phone?: boolean;
   status?: boolean;
   retryCount?: boolean;
@@ -1181,6 +1285,8 @@ export type WaSessionOmit<
 > = runtime.Types.Extensions.GetOmit<
   | 'id'
   | 'name'
+  | 'enabled'
+  | 'pairingMethod'
   | 'phone'
   | 'status'
   | 'retryCount'
@@ -1218,6 +1324,8 @@ export type $WaSessionPayload<
     {
       id: string;
       name: string;
+      enabled: boolean;
+      pairingMethod: $Enums.WaPairingMethod;
       phone: string | null;
       status: $Enums.WaSessionStatus;
       retryCount: number;
@@ -1780,6 +1888,8 @@ export interface Prisma__WaSessionClient<
 export interface WaSessionFieldRefs {
   readonly id: Prisma.FieldRef<'WaSession', 'String'>;
   readonly name: Prisma.FieldRef<'WaSession', 'String'>;
+  readonly enabled: Prisma.FieldRef<'WaSession', 'Boolean'>;
+  readonly pairingMethod: Prisma.FieldRef<'WaSession', 'WaPairingMethod'>;
   readonly phone: Prisma.FieldRef<'WaSession', 'String'>;
   readonly status: Prisma.FieldRef<'WaSession', 'WaSessionStatus'>;
   readonly retryCount: Prisma.FieldRef<'WaSession', 'Int'>;

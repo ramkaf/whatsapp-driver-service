@@ -79,6 +79,8 @@ export type TransactionIsolationLevel =
 export const WaSessionScalarFieldEnum = {
   id: 'id',
   name: 'name',
+  enabled: 'enabled',
+  pairingMethod: 'pairingMethod',
   phone: 'phone',
   status: 'status',
   retryCount: 'retryCount',

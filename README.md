@@ -165,3 +165,9 @@ Check out a few resources that may come in handy when working with NestJS:
 
 Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
  
+
+## WhatsApp session manager
+
+See [session management and operations](docs/backend/whatsapp-sessions.md) for the
+module structure, migration review, environment variables, authenticated endpoints,
+CODE/QR pairing examples, restart/reconnection behavior, and operational limits.

@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  MinLength,
   IsInt,
   IsOptional,
   IsString,
@@ -10,6 +11,71 @@ import {
 import { EEnvironment } from './config.enum.ts';
 
 export class EnvironmentVariablesValidator {
+  @IsString()
+  @MinLength(32)
+  @IsOptional()
+  WA_ADMIN_API_KEY?: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  @IsOptional()
+  WA_MAX_SESSIONS?: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @IsOptional()
+  WA_MAX_RETRIES?: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  @IsOptional()
+  WA_STARTUP_CONCURRENCY?: number;
+
+  @IsInt()
+  @Min(100)
+  @Max(60000)
+  @IsOptional()
+  WA_STARTUP_STAGGER_MS?: number;
+
+  @IsInt()
+  @Min(1000)
+  @Max(2147483647)
+  @IsOptional()
+  WA_WATCHDOG_INTERVAL_MS?: number;
+
+  @IsInt()
+  @Min(1000)
+  @Max(2147483647)
+  @IsOptional()
+  WA_CONNECTION_STUCK_MS?: number;
+
+  @IsInt()
+  @Min(1000)
+  @Max(2147483647)
+  @IsOptional()
+  WA_STABLE_CONNECTION_MS?: number;
+
+  @IsInt()
+  @Min(1000)
+  @Max(60000)
+  @IsOptional()
+  WA_PAIRING_TTL_MS?: number;
+
+  @IsInt()
+  @Min(1000)
+  @Max(180000)
+  @IsOptional()
+  WA_PAIRING_CODE_TTL_MS?: number;
+
+  @IsInt()
+  @Min(1000)
+  @Max(2147483647)
+  @IsOptional()
+  WA_PAIRING_RATE_LIMIT_MS?: number;
+
   @IsString()
   @IsOptional()
   REDIS_HOST?: string;

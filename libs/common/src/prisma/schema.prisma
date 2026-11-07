@@ -17,6 +17,12 @@ enum WaSessionStatus {
   RECONNECTING
   FAILED
   EXPIRED
+  AUTHENTICATING
+}
+
+enum WaPairingMethod {
+  CODE
+  QR
 }
 
 enum WaSessionEventType {
@@ -36,6 +42,8 @@ enum WaSessionEventType {
 model WaSession {
   id                 String           @id @default(cuid()) @db.VarChar(30)
   name               String           @db.VarChar(100)
+  enabled            Boolean          @default(true)
+  pairingMethod      WaPairingMethod  @default(QR) @map("pairing_method")
   phone              String?          @unique @db.VarChar(20)
   status             WaSessionStatus  @default(DISCONNECTED)
   retryCount         Int              @default(0) @map("retry_count")

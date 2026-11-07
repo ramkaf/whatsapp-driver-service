@@ -8,6 +8,19 @@ export const configuer = registerAs('app', (): IAppConfig => {
   const env = validateEnvironment(process.env);
 
   return {
+    whatsapp: {
+      adminApiKey: env.WA_ADMIN_API_KEY ?? '',
+      maxSessions: env.WA_MAX_SESSIONS ?? 50,
+      maxRetries: env.WA_MAX_RETRIES ?? 10,
+      startupConcurrency: env.WA_STARTUP_CONCURRENCY ?? 2,
+      startupStaggerMs: env.WA_STARTUP_STAGGER_MS ?? 500,
+      watchdogIntervalMs: env.WA_WATCHDOG_INTERVAL_MS ?? 30000,
+      connectionStuckMs: env.WA_CONNECTION_STUCK_MS ?? 120000,
+      stableConnectionMs: env.WA_STABLE_CONNECTION_MS ?? 60000,
+      pairingTtlMs: env.WA_PAIRING_TTL_MS ?? 60000,
+      pairingCodeTtlMs: env.WA_PAIRING_CODE_TTL_MS ?? 180000,
+      pairingRateLimitMs: env.WA_PAIRING_RATE_LIMIT_MS ?? 30000,
+    },
     redis: {
       host: env.REDIS_HOST ?? '127.0.0.1',
       port: env.REDIS_PORT ?? 6379,

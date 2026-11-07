@@ -111,6 +111,7 @@ nav:
       - Home: backend/index.md 
       - Boilerplate: backend/boilerplate.md
       - Libs: backend/libs.md
+      - WhatsApp sessions: backend/whatsapp-sessions.md
 
   - Management:
       - Home: management/index.md 

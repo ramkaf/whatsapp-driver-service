@@ -27,6 +27,22 @@ export type StringFilter<$PrismaModel = never> = {
   not?: Prisma.NestedStringFilter<$PrismaModel> | string;
 };
 
+export type BoolFilter<$PrismaModel = never> = {
+  equals?: boolean | Prisma.BooleanFieldRefInput<$PrismaModel>;
+  not?: Prisma.NestedBoolFilter<$PrismaModel> | boolean;
+};
+
+export type EnumWaPairingMethodFilter<$PrismaModel = never> = {
+  equals?:
+    | $Enums.WaPairingMethod
+    | Prisma.EnumWaPairingMethodFieldRefInput<$PrismaModel>;
+  in?: $Enums.WaPairingMethod[];
+  notIn?: $Enums.WaPairingMethod[];
+  not?:
+    | Prisma.NestedEnumWaPairingMethodFilter<$PrismaModel>
+    | $Enums.WaPairingMethod;
+};
+
 export type StringNullableFilter<$PrismaModel = never> = {
   equals?: string | Prisma.StringFieldRefInput<$PrismaModel> | null;
   in?: string[] | null;
@@ -119,6 +135,28 @@ export type StringWithAggregatesFilter<$PrismaModel = never> = {
   _count?: Prisma.NestedIntFilter<$PrismaModel>;
   _min?: Prisma.NestedStringFilter<$PrismaModel>;
   _max?: Prisma.NestedStringFilter<$PrismaModel>;
+};
+
+export type BoolWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: boolean | Prisma.BooleanFieldRefInput<$PrismaModel>;
+  not?: Prisma.NestedBoolWithAggregatesFilter<$PrismaModel> | boolean;
+  _count?: Prisma.NestedIntFilter<$PrismaModel>;
+  _min?: Prisma.NestedBoolFilter<$PrismaModel>;
+  _max?: Prisma.NestedBoolFilter<$PrismaModel>;
+};
+
+export type EnumWaPairingMethodWithAggregatesFilter<$PrismaModel = never> = {
+  equals?:
+    | $Enums.WaPairingMethod
+    | Prisma.EnumWaPairingMethodFieldRefInput<$PrismaModel>;
+  in?: $Enums.WaPairingMethod[];
+  notIn?: $Enums.WaPairingMethod[];
+  not?:
+    | Prisma.NestedEnumWaPairingMethodWithAggregatesFilter<$PrismaModel>
+    | $Enums.WaPairingMethod;
+  _count?: Prisma.NestedIntFilter<$PrismaModel>;
+  _min?: Prisma.NestedEnumWaPairingMethodFilter<$PrismaModel>;
+  _max?: Prisma.NestedEnumWaPairingMethodFilter<$PrismaModel>;
 };
 
 export type StringNullableWithAggregatesFilter<$PrismaModel = never> = {
@@ -423,6 +461,22 @@ export type NestedStringFilter<$PrismaModel = never> = {
   not?: Prisma.NestedStringFilter<$PrismaModel> | string;
 };
 
+export type NestedBoolFilter<$PrismaModel = never> = {
+  equals?: boolean | Prisma.BooleanFieldRefInput<$PrismaModel>;
+  not?: Prisma.NestedBoolFilter<$PrismaModel> | boolean;
+};
+
+export type NestedEnumWaPairingMethodFilter<$PrismaModel = never> = {
+  equals?:
+    | $Enums.WaPairingMethod
+    | Prisma.EnumWaPairingMethodFieldRefInput<$PrismaModel>;
+  in?: $Enums.WaPairingMethod[];
+  notIn?: $Enums.WaPairingMethod[];
+  not?:
+    | Prisma.NestedEnumWaPairingMethodFilter<$PrismaModel>
+    | $Enums.WaPairingMethod;
+};
+
 export type NestedStringNullableFilter<$PrismaModel = never> = {
   equals?: string | Prisma.StringFieldRefInput<$PrismaModel> | null;
   in?: string[] | null;
@@ -510,6 +564,30 @@ export type NestedStringWithAggregatesFilter<$PrismaModel = never> = {
   _count?: Prisma.NestedIntFilter<$PrismaModel>;
   _min?: Prisma.NestedStringFilter<$PrismaModel>;
   _max?: Prisma.NestedStringFilter<$PrismaModel>;
+};
+
+export type NestedBoolWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: boolean | Prisma.BooleanFieldRefInput<$PrismaModel>;
+  not?: Prisma.NestedBoolWithAggregatesFilter<$PrismaModel> | boolean;
+  _count?: Prisma.NestedIntFilter<$PrismaModel>;
+  _min?: Prisma.NestedBoolFilter<$PrismaModel>;
+  _max?: Prisma.NestedBoolFilter<$PrismaModel>;
+};
+
+export type NestedEnumWaPairingMethodWithAggregatesFilter<
+  $PrismaModel = never,
+> = {
+  equals?:
+    | $Enums.WaPairingMethod
+    | Prisma.EnumWaPairingMethodFieldRefInput<$PrismaModel>;
+  in?: $Enums.WaPairingMethod[];
+  notIn?: $Enums.WaPairingMethod[];
+  not?:
+    | Prisma.NestedEnumWaPairingMethodWithAggregatesFilter<$PrismaModel>
+    | $Enums.WaPairingMethod;
+  _count?: Prisma.NestedIntFilter<$PrismaModel>;
+  _min?: Prisma.NestedEnumWaPairingMethodFilter<$PrismaModel>;
+  _max?: Prisma.NestedEnumWaPairingMethodFilter<$PrismaModel>;
 };
 
 export type NestedStringNullableWithAggregatesFilter<$PrismaModel = never> = {

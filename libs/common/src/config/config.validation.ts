@@ -7,6 +7,16 @@ export function validateEnvironment(
   const variables = Object.assign(new EnvironmentVariablesValidator(), env);
 
   for (const key of [
+    'WA_MAX_SESSIONS',
+    'WA_MAX_RETRIES',
+    'WA_STARTUP_CONCURRENCY',
+    'WA_STARTUP_STAGGER_MS',
+    'WA_WATCHDOG_INTERVAL_MS',
+    'WA_CONNECTION_STUCK_MS',
+    'WA_STABLE_CONNECTION_MS',
+    'WA_PAIRING_TTL_MS',
+    'WA_PAIRING_CODE_TTL_MS',
+    'WA_PAIRING_RATE_LIMIT_MS',
     'APP_PORT',
     'PORT',
     'MYSQL_PORT',

@@ -1,0 +1,61 @@
+import { Injectable } from '@nestjs/common';
+import makeWASocket, { Browsers } from '@whiskeysockets/baileys';
+import type {
+  AuthenticationState,
+  CacheStore,
+  WASocket,
+} from '@whiskeysockets/baileys';
+import pino from 'pino';
+
+class RetryCache implements CacheStore {
+  private readonly values = new Map<
+    string,
+    { value: unknown; expires: number }
+  >();
+  get<T>(key: string): T | undefined {
+    const entry = this.values.get(key);
+    if (!entry) return undefined;
+    if (entry.expires <= Date.now()) {
+      this.values.delete(key);
+      return undefined;
+    }
+    return entry.value as T;
+  }
+  set<T>(key: string, value: T): void {
+    this.values.delete(key);
+    if (this.values.size >= 1000)
+      this.values.delete(this.values.keys().next().value!);
+    this.values.set(key, { value, expires: Date.now() + 300000 });
+  }
+  del(key: string): void {
+    this.values.delete(key);
+  }
+  flushAll(): void {
+    this.values.clear();
+  }
+}
+
+@Injectable()
+export class SocketFactoryService {
+  create(
+    sessionId: string,
+    auth: AuthenticationState,
+    qrTimeout: number,
+  ): WASocket {
+    return makeWASocket({
+      auth,
+      browser: Browsers.ubuntu('Chrome'),
+      syncFullHistory: false,
+      markOnlineOnConnect: false,
+      keepAliveIntervalMs: 25000,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      qrTimeout,
+      // Baileys logs can contain authentication material. Application lifecycle
+      // logs are emitted separately with sessionId and safe metadata only.
+      logger: pino({ level: 'silent' }).child({ sessionId }),
+      msgRetryCounterCache: new RetryCache(),
+      // Preserve default initial sync and LID mapping handling.
+    });
+  }
+}
