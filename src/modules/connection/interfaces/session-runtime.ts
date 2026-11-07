@@ -1,6 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys';
 import type { WaSessionStatus, WaPairingMethod } from '@libs/prisma';
-import type { AuthContext } from '../../auth-state/providers/auth-state.service.ts';
+import type { AuthContext } from '../../auth-state/context/auth-state.context.ts';
 import type { CONNECTION_REASONS } from './connection-status.ts';
 
 export interface SessionRuntime {
