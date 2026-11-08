@@ -19,12 +19,12 @@ export class PairingService {
     { phone: string; promise: Promise<PairingCodeResponse> }
   >();
   constructor(
-    private readonly manager: SessionManagerService,
-    private readonly repository: SessionRepository,
+    private readonly sessionManagerService: SessionManagerService,
+    private readonly sessionRepository: SessionRepository,
   ) {}
 
   async code(id: string, phone?: string): Promise<PairingCodeResponse> {
-    const row = await this.repository.require(id);
+    const row = await this.sessionRepository.require(id);
     const number = phone ? normalizePhone(phone) : row.phone;
     if (!number)
       throw new BadRequestException(
@@ -39,8 +39,8 @@ export class PairingService {
       return pending.promise;
     }
     const request = (async (): Promise<PairingCodeResponse> => {
-      await this.manager.preparePairing(id, 'CODE', number);
-      const result = await this.manager.requestPairingCode(id, number);
+      await this.sessionManagerService.preparePairing(id, 'CODE', number);
+      const result = await this.sessionManagerService.requestPairingCode(id, number);
       return {
         sessionId: id,
         pairingMethod: 'CODE',
@@ -57,13 +57,13 @@ export class PairingService {
   }
 
   async qr(id: string) {
-    const row = await this.repository.require(id);
+    const row = await this.sessionRepository.require(id);
     // Reading the endpoint never replaces or creates a socket.
     return {
       sessionId: id,
       pairingMethod: row.pairingMethod,
-      status: this.manager.snapshot(id).status,
-      ...this.manager.pairing(id),
+      status: this.sessionManagerService.snapshot(id).status,
+      ...this.sessionManagerService.pairing(id),
     };
   }
 
@@ -72,14 +72,14 @@ export class PairingService {
       throw new BadRequestException('A pairing code request is in progress');
     let number = phone !== undefined ? normalizePhone(phone) : undefined;
     if (method === 'CODE' && !number) {
-      const row = await this.repository.require(id);
+      const row = await this.sessionRepository.require(id);
       if (!row.phone)
         throw new BadRequestException(
           'A phone number is required for pairing code',
         );
       number = normalizePhone(row.phone);
     }
-    await this.manager.preparePairing(id, method, number);
+    await this.sessionManagerService.preparePairing(id, method, number);
     return this.qr(id);
   }
 }

@@ -1,10 +1,9 @@
-
 import { DisconnectReason } from '@whiskeysockets/baileys';
-import {
-  CONNECTION_REASONS,
-} from '../../interfaces/connection-status.ts';
-import { DisconnectAction, DisconnectRule } from '../../interfaces/connection-update.ts';
+import { CONNECTION_REASONS } from '../../interfaces/connection-status.ts';
+import { DisconnectAction } from '../../interfaces/connection-update.ts';
+import type { DisconnectRule } from '../../interfaces/connection-update.ts';
 
+/** Maps Baileys disconnect codes to the recovery action and public reason. */
 export const DISCONNECT_RULES: readonly DisconnectRule[] = [
   {
     code: DisconnectReason.loggedOut,
@@ -42,12 +41,8 @@ export const DISCONNECT_RULES: readonly DisconnectRule[] = [
     reason: CONNECTION_REASONS.SOCKET_CLOSED,
   },
   {
+    // Baileys uses 408 for both connectionLost and timedOut.
     code: DisconnectReason.connectionLost,
-    action: DisconnectAction.RETRY,
-    reason: CONNECTION_REASONS.TIMEOUT_OR_CONNECTION_LOST,
-  },
-  {
-    code: DisconnectReason.timedOut,
     action: DisconnectAction.RETRY,
     reason: CONNECTION_REASONS.TIMEOUT_OR_CONNECTION_LOST,
   },

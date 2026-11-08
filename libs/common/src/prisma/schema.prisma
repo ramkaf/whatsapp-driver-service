@@ -58,6 +58,7 @@ model WaSession {
   authCreds          WaAuthCreds?
   authKeys           WaAuthKey[]
   events             WaSessionEvent[]
+  isEnabled          Boolean          @default(true)
 
   @@index([status, lastHeartbeatAt])
   @@index([instanceId])

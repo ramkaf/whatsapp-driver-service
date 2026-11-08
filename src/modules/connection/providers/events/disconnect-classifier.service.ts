@@ -8,8 +8,9 @@ import {
   DisconnectInfo,
   DisconnectAction
 } from "../../interfaces/connection-update.js";
-import { DisconnectErrorParser } from './disconnect-error.parser.ts';
-import { DISCONNECT_RULES } from './disconnect-rules.ts';
+import { DisconnectErrorParser } from '../disconnect/disconnect-error.parser.ts';
+import { DISCONNECT_RULES } from '../disconnect/disconnect-rules.ts';
+
 
 @Injectable()
 export class DisconnectClassifierService {

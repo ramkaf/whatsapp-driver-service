@@ -23,6 +23,7 @@ describe('disconnect classification', () => {
     [DisconnectReason.forbidden, 'invalid', 'FORBIDDEN'],
     [DisconnectReason.connectionClosed, 'retry', 'SOCKET_CLOSED'],
     [DisconnectReason.connectionLost, 'retry', 'TIMEOUT_OR_CONNECTION_LOST'],
+    [DisconnectReason.timedOut, 'retry', 'TIMEOUT_OR_CONNECTION_LOST'],
     [DisconnectReason.restartRequired, 'restart', 'RESTART_REQUIRED'],
     [DisconnectReason.unavailableService, 'retry', 'SERVICE_UNAVAILABLE'],
     [999, 'retry', 'UNKNOWN_CLOSE'],
@@ -47,6 +48,11 @@ describe('disconnect classification', () => {
       action: 'retry',
       reason: 'TIMEOUT_OR_CONNECTION_LOST',
     });
+    expect(
+      handler.classify(
+        update(503, 'QR refs attempts ended').lastDisconnect.error,
+      ),
+    ).toMatchObject({ action: 'retry', reason: 'SERVICE_UNAVAILABLE' });
   });
   it.each([
     undefined,
