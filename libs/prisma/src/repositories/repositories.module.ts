@@ -1,11 +1,10 @@
 import { Global, Module } from '@nestjs/common';
 
-import { PrismaModule } from '../prisma.module.ts';
  
 
 @Global()
 @Module({
-  imports: [PrismaModule],
+  imports: [],
   providers: [ 
     //It is sample
     // InboxEventRepository,
