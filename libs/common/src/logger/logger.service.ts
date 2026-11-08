@@ -10,6 +10,7 @@ interface LogCaller {
   column: number;
 }
 
+// لاگ‌های Nest را همراه با اطلاعات محل فراخوانی به سامانهٔ لاگ افرا منتقل می‌کند.
 @Injectable()
 export class AfraLogger extends ConsoleLogger {
   constructor() {

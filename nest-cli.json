@@ -4,7 +4,10 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "builder": "rspack"
+    "builder": "rspack",
+    "assets": [
+      { "include": "modules/ui-test/public/**/*", "watchAssets": true }
+    ]
   },
   "projects": {
     "common": {
@@ -27,11 +30,11 @@
     },
     "prisma": {
       "type": "library",
-      "root": "libs/prisma",
+      "root": "libs/common/src/prisma",
       "entryFile": "index",
-      "sourceRoot": "libs/prisma/src",
+      "sourceRoot": "libs/common/src/prisma/src",
       "compilerOptions": {
-        "tsConfigPath": "libs/prisma/tsconfig.lib.json"
+        "tsConfigPath": "libs/common/tsconfig.lib.json"
       }
     }
   }

@@ -1,15 +1,16 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import type { OnModuleInit, OnApplicationShutdown } from '@nestjs/common';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 import { PrismaClient } from './generated/client.ts';
 
+// دسترسی به دیتابیس و چرخهٔ اتصال، تلاش مجدد اولیه و قطع اتصال Prisma را مدیریت می‌کند.
 @Injectable()
 export class PrismaService
   extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
+  implements OnModuleInit, OnApplicationShutdown
 {
   private readonly logger = new Logger(PrismaService.name);
   private readonly connectionAttempts = 5;
@@ -20,7 +21,10 @@ export class PrismaService
     if (!config.databaseUrl) {
       throw new Error('DATABASE_URL is required for Prisma');
     }
-    super({ adapter: new PrismaMariaDb(config.databaseUrl) });
+    const url = new URL(config.databaseUrl);
+    url.searchParams.set('allowPublicKeyRetrieval', 'true');
+
+    super({ adapter: new PrismaMariaDb(url.toString()) });
   }
 
   async onModuleInit(): Promise<void> {
@@ -58,7 +62,7 @@ export class PrismaService
     }
   }
 
-  async onModuleDestroy(): Promise<void> {
+  async onApplicationShutdown(): Promise<void> {
     try {
       await this.$disconnect();
       this.logger.log('Database disconnected');

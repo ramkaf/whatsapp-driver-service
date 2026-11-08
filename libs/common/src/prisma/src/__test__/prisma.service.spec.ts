@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Test } from '@nestjs/testing';
 import { configuer } from '@libs/common';
-import { PrismaService } from './prisma.service.ts';
+import { PrismaService } from '../prisma.service.ts';
 
 vi.mock('node:timers/promises', () => ({ setTimeout: vi.fn() }));
 
@@ -116,7 +116,7 @@ describe('PrismaService', () => {
     const error = new Error('Disconnect failed');
     vi.spyOn(service, '$disconnect').mockRejectedValue(error);
 
-    await expect(service.onModuleDestroy()).rejects.toBe(error);
+    await expect(service.onApplicationShutdown()).rejects.toBe(error);
 
     expect(logs.error).toHaveBeenCalledWith('Database disconnect failed');
     expect(logs.log).not.toHaveBeenCalledWith('Database disconnected');

@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { configuer } from '../config/configuer.ts';
 import type { IAppConfig, IRedisConfig } from '../config/config.interface.ts';
 
+// اتصال Redis، تلاش‌های اتصال مجدد و بستن اتصال هنگام توقف برنامه را مدیریت می‌کند.
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);

@@ -9,10 +9,12 @@ import {
 if (existsSync('.env')) loadEnvFile('.env');
 
 export default defineConfig({
-  schema: 'libs/prisma/schema.prisma',
-  migrations: { path: 'libs/prisma/migrations' },
+  schema: 'libs/common/src/prisma/schema.prisma',
+  migrations: { path: 'libs/common/src/prisma/migrations' },
   datasource: {
     url: getDatabaseUrl(process.env),
-    shadowDatabaseUrl:getShadowDatabaseUrl(process.env)
+    shadowDatabaseUrl: process.env.MYSQL_SHADOW_DATABASE
+      ? getShadowDatabaseUrl(process.env)
+      : undefined,
   },
 });

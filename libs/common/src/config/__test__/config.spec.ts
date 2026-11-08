@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { configuer, EEnvironment } from './index.ts';
-import { validateEnvironment } from './config.validation.ts';
+import { configuer, EEnvironment } from '../index.ts';
+import { validateEnvironment } from '../config.validation.ts';
 
 describe('application configuration', () => {
   beforeEach(() => {
@@ -78,6 +78,17 @@ describe('application configuration', () => {
     ['REDIS_RETRY_DELAY_MS', ''],
     ['REDIS_MAX_RETRY_DELAY_MS', '2147483648'],
   ])('rejects invalid Redis configuration %s=%s', (key, value) => {
+    expect(() => validateEnvironment({ [key]: value })).toThrow(key);
+  });
+
+  it.each([
+    ['WA_MAX_SESSIONS', '51'],
+    ['WA_MAX_RETRIES', '0'],
+    ['WA_STARTUP_CONCURRENCY', '6'],
+    ['WA_WATCHDOG_INTERVAL_MS', '0'],
+    ['WA_PAIRING_TTL_MS', '60001'],
+    ['WA_ADMIN_API_KEY', 'short-secret'],
+  ])('rejects invalid WhatsApp configuration %s', (key, value) => {
     expect(() => validateEnvironment({ [key]: value })).toThrow(key);
   });
 

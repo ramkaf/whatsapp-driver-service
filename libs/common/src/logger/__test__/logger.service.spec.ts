@@ -10,7 +10,7 @@ import {
   it,
   vi,
 } from 'vitest';
-import { AfraLogger } from './logger.service.ts';
+import { AfraLogger } from '../logger.service.ts';
 
 describe('AfraLogger with Nest and the real Afra JSON formatter', () => {
   let output: string[];

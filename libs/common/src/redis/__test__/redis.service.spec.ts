@@ -2,8 +2,8 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { Logger } from '@nestjs/common';
 import type { RedisOptions } from 'ioredis';
 import { setTimeout as delay } from 'node:timers/promises';
-import { RedisService } from './redis.service.ts';
-import type { IAppConfig } from '../config/config.interface.ts';
+import { RedisService } from '../redis.service.ts';
+import type { IAppConfig } from '../../config/config.interface.ts';
 
 vi.mock('node:timers/promises', () => ({ setTimeout: vi.fn() }));
 const fake = vi.hoisted(() => ({

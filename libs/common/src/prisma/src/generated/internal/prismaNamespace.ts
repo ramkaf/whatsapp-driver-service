@@ -770,6 +770,8 @@ export type TransactionIsolationLevel =
 export const WaSessionScalarFieldEnum = {
   id: 'id',
   name: 'name',
+  enabled: 'enabled',
+  pairingMethod: 'pairingMethod',
   phone: 'phone',
   status: 'status',
   retryCount: 'retryCount',
@@ -916,6 +918,22 @@ export type WaSessionEventOrderByRelevanceFieldEnum =
 export type StringFieldRefInput<$PrismaModel> = FieldRefInputType<
   $PrismaModel,
   'String'
+>;
+
+/**
+ * Reference to a field of type 'Boolean'
+ */
+export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<
+  $PrismaModel,
+  'Boolean'
+>;
+
+/**
+ * Reference to a field of type 'WaPairingMethod'
+ */
+export type EnumWaPairingMethodFieldRefInput<$PrismaModel> = FieldRefInputType<
+  $PrismaModel,
+  'WaPairingMethod'
 >;
 
 /**
