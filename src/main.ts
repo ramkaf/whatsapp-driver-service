@@ -1,7 +1,7 @@
 import { configuer, AfraLogger, InitAfraLogger } from '@libs/common';
 InitAfraLogger();
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module.js';
+import { AppModule } from './app.module.ts';
 import type { IAppConfig } from '../libs/common/src/config/index.ts';
 import { Logger } from '@nestjs/common';
 
