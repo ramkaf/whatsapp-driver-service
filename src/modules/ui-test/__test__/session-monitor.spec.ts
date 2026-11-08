@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { PairingMethodEnum } from '../../sessions/interfaces/session.interface.ts';
 
 interface RuntimeStatus {
   status: string;
@@ -13,7 +14,7 @@ interface SessionRow {
   name: string;
   phone: string;
   status: string;
-  pairingMethod: 'QR' | 'CODE';
+  pairingMethod: PairingMethodEnum;
   lastDisconnectCode?: number;
   runtime: RuntimeStatus;
 }
@@ -75,11 +76,18 @@ interface PairingResponse {
   expiresAt: string;
 }
 
+interface StreamFrame {
+  sessionId: string;
+  event: string;
+  data?: unknown;
+}
+
 interface MonitorConstructor {
   new (options: {
     request: (path: string, body: unknown, token: string) => Promise<unknown>;
     createSocket: () => FakeSocket;
     onChange: () => void;
+    onFrame?: (frame: StreamFrame) => void;
   }): Monitor;
   needsPairing(entry: { row: SessionRow; status: RuntimeStatus }): boolean;
 }
@@ -107,7 +115,7 @@ function row(id: string, overrides: Partial<SessionRow> = {}): SessionRow {
     name: 'Account ' + id,
     phone: '989121234567',
     status: 'CONNECTED',
-    pairingMethod: 'QR',
+    pairingMethod: PairingMethodEnum.QR,
     runtime: { ...connected },
     ...overrides,
   };
@@ -137,6 +145,7 @@ function harness(rows: SessionRow[]) {
     },
   );
   const onChange = vi.fn();
+  const onFrame = vi.fn<(frame: StreamFrame) => void>();
   const monitor = new MonitorClass({
     request,
     createSocket: () => {
@@ -145,10 +154,11 @@ function harness(rows: SessionRow[]) {
       return socket;
     },
     onChange,
+    onFrame,
   });
   monitors.push(monitor);
   monitor.start(rows, token);
-  return { monitor, sockets, request, onChange };
+  return { monitor, sockets, request, onChange, onFrame };
 }
 
 beforeEach(() => {
@@ -169,6 +179,83 @@ afterEach(() => {
 });
 
 describe('all-account session monitor', () => {
+  it('shares each valid frame after updating its account without opening another stream', () => {
+    const { monitor, sockets, onFrame } = harness([row('one'), row('two')]);
+    sockets[0].open('one');
+    sockets[1].open('two');
+    onFrame.mockClear();
+    onFrame.mockImplementation((frame) => {
+      if (frame.event === 'whatsapp.status')
+        expect(monitor.entries.get(frame.sessionId)?.status).toEqual(
+          frame.data,
+        );
+      if (frame.event === 'messages.upsert')
+        expect(monitor.entries.get(frame.sessionId)?.count).toBe(1);
+    });
+    const messages = {
+      messages: [
+        {
+          key: { id: 'incoming', fromMe: false },
+          message: { conversation: 'shared event' },
+        },
+      ],
+    };
+
+    sockets[0].frame('one', 'whatsapp.status', disconnected);
+    sockets[1].frame('two', 'messages.upsert', messages);
+    sockets[1].frame('two', 'transport.status', { connected: true });
+    sockets[0].frame('two', 'messages.upsert', messages);
+    sockets[0].onmessage?.({ data: '{' });
+    sockets[0].onmessage?.({ data: 'null' });
+    sockets[0].onmessage?.({ data: '42' });
+
+    expect(onFrame.mock.calls.map(([frame]) => frame)).toEqual([
+      { sessionId: 'one', event: 'whatsapp.status', data: disconnected },
+      { sessionId: 'two', event: 'messages.upsert', data: messages },
+      {
+        sessionId: 'two',
+        event: 'transport.status',
+        data: { connected: true },
+      },
+    ]);
+    expect(sockets).toHaveLength(2);
+  });
+
+  it('ignores retired stream callbacks after recovery while sharing the current stream', async () => {
+    const { monitor, sockets, onFrame } = harness([row('one')]);
+    sockets[0].open('one');
+    const retiredMessage = sockets[0].onmessage!;
+    const retiredError = sockets[0].onerror!;
+    const retiredClose = sockets[0].onclose!;
+
+    sockets[0].disconnect(1006);
+    await vi.advanceTimersByTimeAsync(3000);
+    sockets[1].open('one');
+    onFrame.mockClear();
+    retiredMessage({
+      data: JSON.stringify({
+        sessionId: 'one',
+        event: 'whatsapp.status',
+        data: disconnected,
+      }),
+    });
+    retiredError();
+    retiredClose({ code: 1008 });
+
+    expect(onFrame).not.toHaveBeenCalled();
+    expect(monitor.entries.get('one')).toMatchObject({
+      transport: 'connected',
+      status: connected,
+    });
+    expect(sockets[1].close).not.toHaveBeenCalled();
+    sockets[1].frame('one', 'whatsapp.status', disconnected);
+    expect(onFrame).toHaveBeenCalledExactlyOnceWith({
+      sessionId: 'one',
+      event: 'whatsapp.status',
+      data: disconnected,
+    });
+  });
+
   it('subscribes every account and observes incoming batches without selecting a session', () => {
     const { monitor, sockets } = harness([row('one'), row('two')]);
     sockets[0].open('one');
@@ -339,7 +426,7 @@ describe('all-account session monitor', () => {
       row('qr', { status: 'LOGGED_OUT', runtime: disconnected }),
       row('code', {
         status: 'LOGGED_OUT',
-        pairingMethod: 'CODE',
+        pairingMethod: PairingMethodEnum.CODE,
         runtime: disconnected,
       }),
     ];
@@ -385,7 +472,7 @@ describe('all-account session monitor', () => {
       row('one', {
         status: 'LOGGED_OUT',
         runtime: disconnected,
-        pairingMethod: 'CODE',
+        pairingMethod: PairingMethodEnum.CODE,
       }),
     ]);
     request.mockReturnValueOnce(pending.promise);
@@ -409,7 +496,7 @@ describe('all-account session monitor', () => {
       row('one', {
         status: 'LOGGED_OUT',
         runtime: disconnected,
-        pairingMethod: 'CODE',
+        pairingMethod: PairingMethodEnum.CODE,
       }),
     ]);
     request.mockReturnValueOnce(pending.promise);
@@ -418,7 +505,7 @@ describe('all-account session monitor', () => {
     monitor.sync([
       row('one', {
         status: 'CONNECTING',
-        pairingMethod: 'CODE',
+        pairingMethod: PairingMethodEnum.CODE,
         runtime: { connected: false, status: 'CONNECTING' },
       }),
     ]);
@@ -439,7 +526,7 @@ describe('all-account session monitor', () => {
       row('one', {
         status: 'LOGGED_OUT',
         runtime: disconnected,
-        pairingMethod: 'CODE',
+        pairingMethod: PairingMethodEnum.CODE,
       }),
     ]);
     request.mockReturnValueOnce(pending.promise);
@@ -465,7 +552,7 @@ describe('all-account session monitor', () => {
       row('two', {
         status: 'LOGGED_OUT',
         runtime: disconnected,
-        pairingMethod: 'CODE',
+        pairingMethod: PairingMethodEnum.CODE,
       }),
     ];
     const { monitor, sockets, request } = harness(rows);
@@ -499,7 +586,7 @@ describe('all-account session monitor', () => {
       row('one', {
         status: 'LOGGED_OUT',
         runtime: disconnected,
-        pairingMethod: 'QR',
+        pairingMethod: PairingMethodEnum.QR,
       }),
     ]);
     const entry = monitor.entries.get('one')!;

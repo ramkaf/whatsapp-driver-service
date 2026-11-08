@@ -23,14 +23,6 @@ export const WaSessionStatus = {
 export type WaSessionStatus =
   (typeof WaSessionStatus)[keyof typeof WaSessionStatus];
 
-export const WaPairingMethod = {
-  CODE: 'CODE',
-  QR: 'QR',
-} as const;
-
-export type WaPairingMethod =
-  (typeof WaPairingMethod)[keyof typeof WaPairingMethod];
-
 export const WaSessionEventType = {
   SESSION_CREATED: 'SESSION_CREATED',
   CONNECTION_STARTED: 'CONNECTION_STARTED',

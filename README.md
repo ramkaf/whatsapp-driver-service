@@ -32,11 +32,16 @@ Use reconnect/disconnect to test recovery;
 disconnect preserves stored authentication. Renew QR explicitly when pairing
 expires. The key remains in page memory and is not embedded or saved by the page.
 
-The panel polls QR every two seconds and receives connection state through the
-WebSocket API below. It reconnects its stream after transport failures.
+The monitor keeps one WebSocket per session and reconnects it after transport
+failures. Selecting a session reuses that stream for details and message events;
+it does not open another socket. QR images are polled once per account and shared
+with the details view, together with pairing codes and their expiry countdowns.
 It displays the latest 200 event objects, not the internal WASocket or auth keys.
 Events are live only: selecting another session or refreshing does not replay
 missed messages.
+
+Read `GET /sessions/:id` for session metadata and the current `runtime` snapshot;
+`runtime.connected` indicates live WhatsApp connectivity.
 
 All disposable UI code lives in `src/modules/ui-test`: `UiTestModule`,
 `UiTestController`, and `public/test-panel.html` (HTML, CSS, and browser JavaScript).
@@ -58,10 +63,12 @@ All routes below require `Authorization: Bearer <WA_ADMIN_API_KEY>` and prepend
 | Request                             | Body / result                                                                                                                                                                               |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /sessions`                    | `{"name":"Test QR","pairingMethod":"QR"}` or `{"name":"Test code","pairingMethod":"CODE","phone":"989121234567"}`. Returns a new `id`; CODE creation does not itself return a pairing code. |
-| `POST /sessions/:id/qr`             | `{}` starts/selects/renews QR pairing. Returns the current QR metadata; `qr` may initially be null.                                                                                         |
+| `POST /sessions/:id/qr`             | `{}` selects QR and starts or renews pairing. Returns the current QR metadata; `qr` may initially be null.                                                                                         |
 | `GET /sessions/:id/qr`              | Reads `{sessionId,pairingMethod,status,qr,expiresAt}` without restarting. Refresh until QR is available; render locally.                                                                    |
 | `POST /sessions/:id/pairing-code`   | `{"phone":"989121234567"}`, or `{}` to use the stored session phone. Returns `{sessionId,pairingMethod,status,code,expiresAt}`.                                                             |
-| `POST /sessions/:id/pairing-method` | `{"pairingMethod":"QR"}` or `{"pairingMethod":"CODE","phone":"989121234567"}` explicitly selects the method.                                                                                |
+
+Requesting QR or CODE also selects that pairing method for the unpaired session.
+There is no separate method-selection request.
 
 Phones are validated using libphonenumber and normalized to international digits.
 Invalid/empty/null phone values, unsupported methods, and missing CODE phones are
@@ -75,9 +82,9 @@ Pairing codes/QR payloads are not included in the public WebSocket event stream.
 ## Connection WebSocket API
 
 Connect to `ws://localhost:3000/connections/events` (use `wss` with HTTPS,
-your configured port, and prepend `API_PREFIX` if set). The old
-`/test-panel/events` path remains an alias. Browser origins must match the server
-or an explicit entry in `APP_CORS_ORIGINS`; `*` does not grant WebSocket access.
+your configured port, and prepend `API_PREFIX` if set). Browser origins must
+match the server or an explicit entry in `APP_CORS_ORIGINS`; `*` does not grant
+WebSocket access.
 
 Within five seconds of opening, send one subscription frame:
 

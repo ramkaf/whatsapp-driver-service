@@ -1,7 +1,7 @@
 import { DisconnectReason } from '@whiskeysockets/baileys';
-import { CONNECTION_REASONS } from '../../interfaces/connection-status.ts';
-import { DisconnectAction } from '../../interfaces/connection-update.ts';
-import type { DisconnectRule } from '../../interfaces/connection-update.ts';
+import { CONNECTION_REASONS } from './connection-status.ts';
+import { DisconnectAction } from './connection-update.ts';
+import type { DisconnectRule } from './connection-update.ts';
 
 /** Maps Baileys disconnect codes to the recovery action and public reason. */
 export const DISCONNECT_RULES: readonly DisconnectRule[] = [

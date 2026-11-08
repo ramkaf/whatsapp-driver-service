@@ -27,12 +27,13 @@ Existing scaffold files under `src/modules/` are implemented in place:
 
 - `auth-state/auth-state/auth-state.service.ts`: MySQL credentials and Signal key
   storage, BufferJSON snapshots, protobuf rehydration, serialized durable writes.
-- `connection/session-manager/session-manager.service.ts`: sole runtime/socket
-  owner, per-session operation queue, generation fencing, cleanup and restoration.
+- `connection/providers/session/session-manager.service.ts`: sole runtime/socket
+  owner, connection update handling, per-session operation queue, generation
+  fencing, cleanup and restoration.
 - `connection/socket-factory/socket-factory.service.ts`: stable Ubuntu/Chrome
   browser identity, isolated bounded retry cache, default initial sync preserved.
-- `connection/connection-handler/connection-handler.service.ts`: normalizes
-  connection updates and classifies installed Baileys disconnect reasons.
+- `connection/utils/disconnect-classifier.util.ts`: reads
+  disconnect errors and classifies installed Baileys disconnect reasons.
 - `connection/connection-supervisor/connection-supervisor.service.ts`: bounded
   exponential retry policy with jitter; counters reset after a stable connection.
 - `pairing/pairing/pairing.service.ts`: CODE/QR workflows, phone validation and
@@ -132,7 +133,7 @@ If `APP_PORT` changes, use that port for the documentation URL too.
    It may wait for socket readiness. Enter the returned code in WhatsApp's
    linked-device phone-number linking flow. Do not treat AWAITING_PAIRING as
    success and do not share the code or its response.
-5. Execute **GET /api/sessions/{id}/status** until `runtime.connected` is true.
+5. Execute **GET /api/sessions/{id}** until `runtime.connected` is true.
    A brief AUTHENTICATING/RECONNECTING transition after pairing is expected.
 6. Test **disconnect**: authentication remains, `enabled` becomes false and no
    automatic reconnection occurs. Then test **reconnect**: the same persisted
@@ -147,7 +148,7 @@ not a scannable image. Render that value locally in a trusted QR-capable UI, sca
 it from the phone's linked-device flow and poll status. Do not send the login QR
 to third-party conversion sites. Read again on refresh/expiry; the QR endpoint
 never restarts the socket. To explicitly renew expired pairing, use
-**POST /api/sessions/{id}/pairing-method** with `{"pairingMethod":"QR"}`.
+**POST /api/sessions/{id}/qr** with `{}`.
 
 Troubleshooting while using **Execute**:
 
@@ -178,11 +179,10 @@ and Baileys calls use E.164 digits without `+`.
 | --- | --- | --- |
 | POST | `/sessions` | Create metadata and initiate connection; does not wait for pairing |
 | GET | `/sessions` | List safe metadata and current runtime snapshots |
-| GET | `/sessions/:id` | Session details |
-| GET | `/sessions/:id/status` | Persisted metadata plus current runtime status |
+| GET | `/sessions/:id` | Persisted metadata plus current runtime status |
 | POST | `/sessions/:id/pairing-code` | Generate/reuse code; optional `{ "phone": "..." }` |
 | GET | `/sessions/:id/qr` | Current raw QR and application expiry, or null |
-| POST | `/sessions/:id/pairing-method` | Explicitly select CODE/QR on an unregistered session |
+| POST | `/sessions/:id/qr` | Select QR and start or renew pairing on an unregistered session |
 | POST | `/sessions/:id/reconnect` | Manual restart/reset retry count using persisted auth |
 | POST | `/sessions/:id/disconnect` | Disable automatic restore/retry, close without logout |
 | POST | `/sessions/:id/logout` | Confirm remote logout, then invalidate local auth |
@@ -243,12 +243,12 @@ Pairing code expiresAt is also an application bound, not a guarantee that WhatsA
 will accept the code until that exact instant. Codes/QRs are cleared on expiry,
 authentication and socket replacement; pairing material is never written to events.
 
-Switch an existing unregistered session without creating another socket:
+Select or renew QR pairing for an unregistered session; use `/pairing-code` to select CODE and receive its code:
 
 ```bash
-curl -X POST "$BASE_URL/sessions/SESSION_ID/pairing-method" \
+curl -X POST "$BASE_URL/sessions/SESSION_ID/qr" \
   -H "Authorization: Bearer $WA_ADMIN_API_KEY" \
-  -H 'Content-Type: application/json' -d '{"pairingMethod":"QR"}'
+  -H 'Content-Type: application/json' -d '{}'
 ```
 
 Normal reconnections restore persisted credentials. `restartRequired` after

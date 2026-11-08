@@ -1,10 +1,11 @@
+import { PairingMethodEnum } from '../../sessions/interfaces/session.interface.ts';
 import type { MockInstance } from 'vitest';
 import type {
   SessionPersistence,
   SessionAuthentication,
   SessionSocketFactory,
 } from '../interfaces/session-dependencies.ts';
-import { DisconnectClassifierService } from '../providers/disconnect/disconnect-classifier.service.ts';
+import * as disconnectClassifier from '../utils/disconnect-classifier.util.ts';
 import { SessionRuntimeService } from '../providers/session/session-runtime.service.ts';
 import { SocketLifecycleService } from '../providers/socket/socket-lifecycle.service.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,7 +20,6 @@ import type {
 import type { IAppConfig } from '@libs/common';
 import type { WaSession } from '@libs/prisma';
 import { SessionManagerService } from '../providers/session/session-manager.service.ts';
-import { ConnectionHandlerService } from '../providers/events/connection-handler.service.ts';
 import { ConnectionSupervisorService } from '../providers/recovery/connection-supervisor.service.ts';
 import type { AuthContext } from '../../auth-state/context/auth-state.context.ts';
 
@@ -66,7 +66,7 @@ function row(id: string, data: Partial<WaSession> = {}): WaSession {
     phone: null,
     status: 'DISCONNECTED',
     enabled: true,
-    pairingMethod: 'QR',
+    pairingMethod: PairingMethodEnum.QR,
     retryCount: 0,
     lastConnectedAt: null,
     lastDisconnectedAt: null,
@@ -187,7 +187,6 @@ describe('SessionManagerService', () => {
       repository as unknown as SessionPersistence,
       authStore as unknown as SessionAuthentication,
       factory as unknown as SessionSocketFactory,
-      new ConnectionHandlerService(new DisconnectClassifierService()),
       new ConnectionSupervisorService(config),
       config,
       new SessionRuntimeService(),
@@ -198,6 +197,48 @@ describe('SessionManagerService', () => {
     await manager.onModuleDestroy();
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it('handles connecting and open updates without classifying a disconnect', async () => {
+    authenticated.add('one');
+    await manager.start('one');
+    const classify = vi.spyOn(disconnectClassifier, 'classifyDisconnect');
+
+    await event(0, { connection: 'connecting' });
+    await event(0, { connection: 'open' });
+
+    expect(manager.snapshot('one').connected).toBe(true);
+    expect(classify).not.toHaveBeenCalled();
+  });
+
+  it('recovers a close update that has no disconnect error', async () => {
+    await manager.start('one');
+    const classify = vi.spyOn(disconnectClassifier, 'classifyDisconnect');
+
+    await event(0, { connection: 'close' });
+
+    expect(classify).toHaveBeenCalledExactlyOnceWith(undefined);
+    expect(manager.snapshot('one')).toMatchObject({
+      status: 'RECONNECTING',
+      reason: 'UNKNOWN_CLOSE',
+      lastDisconnectCode: null,
+    });
+  });
+
+  it('classifies the original error from a close update', async () => {
+    await manager.start('one');
+    const classify = vi.spyOn(disconnectClassifier, 'classifyDisconnect');
+    const update = close(DisconnectReason.loggedOut);
+
+    await event(0, update);
+
+    expect(classify).toHaveBeenCalledExactlyOnceWith(
+      update.lastDisconnect!.error,
+    );
+    expect(manager.snapshot('one')).toMatchObject({
+      status: 'LOGGED_OUT',
+      reason: 'LOGGED_OUT',
+    });
   });
 
   it('prevents simultaneous requests from creating duplicate sockets', async () => {
@@ -250,7 +291,7 @@ describe('SessionManagerService', () => {
   });
 
   it('waits for readiness before generating a code and reuses the valid code', async () => {
-    await manager.preparePairing('one', 'CODE', '989121234567');
+    await manager.preparePairing('one', PairingMethodEnum.CODE, '989121234567');
     const pending = manager.requestPairingCode('one', '989121234567');
     expect(sockets[0]!.requestPairingCode).not.toHaveBeenCalled();
     await event(0, { qr: 'hidden-qr' });
@@ -278,7 +319,7 @@ describe('SessionManagerService', () => {
   });
 
   it('reports an expired pairing code without treating it as account logout', async () => {
-    await manager.preparePairing('one', 'CODE', '989121234567');
+    await manager.preparePairing('one', PairingMethodEnum.CODE, '989121234567');
     await event(0, { qr: 'hidden-qr' });
     await manager.requestPairingCode('one', '989121234567');
     await vi.advanceTimersByTimeAsync(config.whatsapp.pairingCodeTtlMs + 1);
@@ -389,7 +430,7 @@ describe('SessionManagerService', () => {
   });
 
   it('rate limits repeated unsuccessful pairing code requests', async () => {
-    await manager.preparePairing('one', 'CODE', '989121234567');
+    await manager.preparePairing('one', PairingMethodEnum.CODE, '989121234567');
     await event(0, { qr: 'secret' });
     sockets[0]!.requestPairingCode.mockRejectedValueOnce(
       new Error('Not ready'),
@@ -405,9 +446,9 @@ describe('SessionManagerService', () => {
 
   it('never creates a pairing socket for already-paired stored credentials', async () => {
     authenticated.add('one');
-    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
-      'use reconnect',
-    );
+    await expect(
+      manager.preparePairing('one', PairingMethodEnum.QR),
+    ).rejects.toThrow('use reconnect');
     expect(factory.create).not.toHaveBeenCalled();
   });
 
@@ -416,7 +457,7 @@ describe('SessionManagerService', () => {
     await manager.start('one');
     await event(0, close(DisconnectReason.loggedOut));
     expect(authStore.clear).not.toHaveBeenCalled();
-    await manager.preparePairing('one', 'QR');
+    await manager.preparePairing('one', PairingMethodEnum.QR);
     expect(authStore.clear).toHaveBeenCalledWith('one');
     expect(factory.create).toHaveBeenCalledTimes(2);
   });
@@ -570,9 +611,9 @@ describe('SessionManagerService', () => {
   it('rejects restart and pairing during shutdown', async () => {
     await manager.onModuleDestroy();
     await expect(manager.restart('one')).rejects.toThrow('shutting down');
-    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
-      'shutting down',
-    );
+    await expect(
+      manager.preparePairing('one', PairingMethodEnum.QR),
+    ).rejects.toThrow('shutting down');
     await manager.onApplicationBootstrap();
     expect(repository.recoverable).not.toHaveBeenCalled();
   });
@@ -797,7 +838,7 @@ describe('SessionManagerService', () => {
       await manager.start('one');
       await event(0, close(code));
       expect(authStore.clear).not.toHaveBeenCalled();
-      await manager.preparePairing('one', 'QR');
+      await manager.preparePairing('one', PairingMethodEnum.QR);
       expect(authStore.clear).toHaveBeenCalledWith('one');
       expect(factory.create).toHaveBeenCalledTimes(2);
     },
@@ -806,24 +847,24 @@ describe('SessionManagerService', () => {
   it('rejects pairing on an authenticated live session', async () => {
     authenticated.add('one');
     await manager.start('one');
-    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
-      'already authenticated',
-    );
+    await expect(
+      manager.preparePairing('one', PairingMethodEnum.QR),
+    ).rejects.toThrow('already authenticated');
     expect(authStore.clear).not.toHaveBeenCalled();
   });
 
   it('rejects pairing while authentication is in progress', async () => {
     await manager.start('one');
     await event(0, { isNewLogin: true });
-    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
-      'in progress',
-    );
+    await expect(
+      manager.preparePairing('one', PairingMethodEnum.QR),
+    ).rejects.toThrow('in progress');
   });
 
   it('prevents changing the session phone during pairing', async () => {
     rows.get('one')!.phone = '989121234567';
     await expect(
-      manager.preparePairing('one', 'CODE', '989189876543'),
+      manager.preparePairing('one', PairingMethodEnum.CODE, '989189876543'),
     ).rejects.toThrow('cannot be changed');
     expect(factory.create).not.toHaveBeenCalled();
   });
@@ -831,9 +872,9 @@ describe('SessionManagerService', () => {
   it('rechecks identity when authentication is opened for pairing', async () => {
     authStore.hasIdentity.mockResolvedValueOnce(false);
     authenticated.add('one');
-    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
-      'use reconnect',
-    );
+    await expect(
+      manager.preparePairing('one', PairingMethodEnum.QR),
+    ).rejects.toThrow('use reconnect');
   });
 
   it('requires a runtime before requesting a code', async () => {
@@ -843,7 +884,7 @@ describe('SessionManagerService', () => {
   });
 
   it('times out code requests without blocking the event queue', async () => {
-    await manager.preparePairing('one', 'CODE');
+    await manager.preparePairing('one', PairingMethodEnum.CODE);
     const pending = expect(
       manager.requestPairingCode('one', '989121234567'),
     ).rejects.toThrow('not ready');
@@ -853,7 +894,7 @@ describe('SessionManagerService', () => {
   });
 
   it('rejects a pending code request when its connection changes', async () => {
-    await manager.preparePairing('one', 'CODE');
+    await manager.preparePairing('one', PairingMethodEnum.CODE);
     const pending = expect(
       manager.requestPairingCode('one', '989121234567'),
     ).rejects.toThrow('connection changed');
@@ -872,7 +913,7 @@ describe('SessionManagerService', () => {
   });
 
   it('rejects code requests once the session has authenticated', async () => {
-    await manager.preparePairing('one', 'CODE');
+    await manager.preparePairing('one', PairingMethodEnum.CODE);
     await event(0, { connection: 'connecting' });
     sockets[0]!.ev.emit('creds.update', {
       me: { id: '989121234567@s.whatsapp.net' },
@@ -883,7 +924,7 @@ describe('SessionManagerService', () => {
   });
 
   it('renews an expired pairing code and persists its credentials', async () => {
-    await manager.preparePairing('one', 'CODE');
+    await manager.preparePairing('one', PairingMethodEnum.CODE);
     await event(0, { connection: 'connecting' });
     await manager.requestPairingCode('one', '989121234567');
     await vi.advanceTimersByTimeAsync(config.whatsapp.pairingCodeTtlMs);
@@ -896,7 +937,7 @@ describe('SessionManagerService', () => {
   });
 
   it('does not expose a code if its credentials cannot be persisted', async () => {
-    await manager.preparePairing('one', 'CODE');
+    await manager.preparePairing('one', PairingMethodEnum.CODE);
     await event(0, { connection: 'connecting' });
     vi.mocked(contexts[0]!.saveCreds).mockRejectedValueOnce(new Error('write'));
     await expect(
@@ -980,8 +1021,8 @@ describe('SessionManagerService', () => {
   });
 
   it('reuses a live pairing socket when explicitly preparing pairing again', async () => {
-    await manager.preparePairing('one', 'QR');
-    await manager.preparePairing('one', 'CODE');
+    await manager.preparePairing('one', PairingMethodEnum.QR);
+    await manager.preparePairing('one', PairingMethodEnum.CODE);
     expect(factory.create).toHaveBeenCalledOnce();
     await event(0, { connection: 'connecting' });
     expect((await manager.requestPairingCode('one', '989121234567')).code).toBe(
@@ -992,9 +1033,9 @@ describe('SessionManagerService', () => {
   it('rejects pairing if the persisted record already marks a live socket as connected', async () => {
     await manager.start('one');
     rows.get('one')!.status = 'CONNECTED';
-    await expect(manager.preparePairing('one', 'QR')).rejects.toThrow(
-      'already authenticated',
-    );
+    await expect(
+      manager.preparePairing('one', PairingMethodEnum.QR),
+    ).rejects.toThrow('already authenticated');
   });
 
   it('does not reset retries before stability and resets them only once after stability', async () => {
@@ -1073,7 +1114,7 @@ describe('SessionManagerService', () => {
   });
 
   it('allows a failed pairing code request to be retried at the rate-limit boundary', async () => {
-    await manager.preparePairing('one', 'CODE');
+    await manager.preparePairing('one', PairingMethodEnum.CODE);
     await event(0, { connection: 'connecting' });
     sockets[0]!.requestPairingCode.mockRejectedValueOnce(new Error('request'));
     await expect(

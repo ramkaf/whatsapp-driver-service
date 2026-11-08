@@ -27,7 +27,12 @@ describe('Swagger (e2e)', () => {
       await app.init();
       try {
         const base = prefix ? `/${prefix}` : '';
-        expect(Object.keys(document.paths)).toHaveLength(10);
+        expect(Object.keys(document.paths)).toHaveLength(8);
+        expect(document.paths[`${base}/sessions/{id}/status`]).toBeUndefined();
+        expect(
+          document.paths[`${base}/sessions/{id}/pairing-method`],
+        ).toBeUndefined();
+        expect(document.components!.schemas!.PairingMethodDto).toBeUndefined();
         expect(document.paths[`${base}/sessions`]!.get!.security).toEqual([
           { 'admin-token': [] },
         ]);

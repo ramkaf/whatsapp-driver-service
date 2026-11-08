@@ -30,11 +30,7 @@ import {
 } from '@nestjs/swagger';
 import { SessionsService } from '../providers/sessions.service.ts';
 import { PairingService } from '../../pairing/providers/pairing.service.ts';
-import {
-  CreateSessionDto,
-  PairingCodeDto,
-  PairingMethodDto,
-} from '../dto/sessions.dto.ts';
+import { CreateSessionDto, PairingCodeDto } from '../dto/sessions.dto.ts';
 import {
   ApiErrorResponseDto,
   PairingCodeResponseDto,
@@ -42,6 +38,7 @@ import {
   SessionResponseDto,
 } from '../dto/sessions-response.dto.ts';
 import { AdminGuard } from '../guards/admin.guard.ts';
+import { PairingMethodEnum } from '../interfaces/session.interface.ts';
 
 const ApiSessionId = () =>
   applyDecorators(
@@ -91,8 +88,8 @@ const ApiSessionId = () =>
 )
 export class SessionsController {
   constructor(
-    private readonly sessions: SessionsService,
-    private readonly pairing: PairingService,
+    private readonly sessionsService: SessionsService,
+    private readonly pairingService: PairingService,
   ) {}
 
   @Post()
@@ -114,40 +111,32 @@ export class SessionsController {
       },
       qr: {
         summary: 'Pair by scanning a QR',
-        value: { name: 'WhatsApp 02', pairingMethod: 'QR' },
+        value: { name: 'WhatsApp 02', pairingMethod: PairingMethodEnum.QR },
       },
     },
   })
   @ApiCreatedResponse({ type: SessionResponseDto })
   create(@Body() dto: CreateSessionDto) {
-    return this.sessions.create(dto);
+    return this.sessionsService.create(dto);
   }
 
   @Get()
   @ApiOperation({ summary: 'List sessions with current runtime state' })
   @ApiOkResponse({ type: SessionResponseDto, isArray: true })
   list() {
-    return this.sessions.list();
+    return this.sessionsService.list();
   }
 
   @Get(':id')
   @ApiSessionId()
-  @ApiOperation({ summary: 'Get session metadata and runtime' })
-  @ApiOkResponse({ type: SessionResponseDto })
-  details(@Param('id') id: string) {
-    return this.sessions.details(id);
-  }
-
-  @Get(':id/status')
-  @ApiSessionId()
   @ApiOperation({
-    summary: 'Check current connectivity',
+    summary: 'Get session metadata and current connectivity',
     description:
       'Success is runtime.connected=true. Persisted status alone can reflect a previous process.',
   })
   @ApiOkResponse({ type: SessionResponseDto })
-  status(@Param('id') id: string) {
-    return this.sessions.details(id);
+  details(@Param('id') id: string) {
+    return this.sessionsService.details(id);
   }
 
   @Post(':id/pairing-code')
@@ -176,7 +165,7 @@ export class SessionsController {
     type: ApiErrorResponseDto,
   })
   code(@Param('id') id: string, @Body() dto: PairingCodeDto) {
-    return this.pairing.code(id, dto.phone);
+    return this.pairingService.requestPairingCode(id, dto.phone);
   }
 
   @Get(':id/qr')
@@ -189,7 +178,7 @@ export class SessionsController {
   })
   @ApiOkResponse({ type: QrResponseDto })
   qr(@Param('id') id: string) {
-    return this.pairing.qr(id);
+    return this.pairingService.qr(id);
   }
 
   @Post(':id/qr')
@@ -203,28 +192,7 @@ export class SessionsController {
   })
   @ApiOkResponse({ type: QrResponseDto })
   startQr(@Param('id') id: string) {
-    return this.pairing.select(id, 'QR');
-  }
-
-  @Post(':id/pairing-method')
-  @HttpCode(200)
-  @ApiTags('Pairing')
-  @ApiSessionId()
-  @ApiOperation({
-    summary: 'Select CODE or QR for an unregistered session',
-    description:
-      'Explicitly renew expired pairing or switch method without creating a duplicate socket. For a paired session use reconnect.',
-  })
-  @ApiBody({
-    type: PairingMethodDto,
-    examples: {
-      qr: { value: { pairingMethod: 'QR' } },
-      code: { value: { pairingMethod: 'CODE', phone: '989121234567' } },
-    },
-  })
-  @ApiOkResponse({ type: QrResponseDto })
-  method(@Param('id') id: string, @Body() dto: PairingMethodDto) {
-    return this.pairing.select(id, dto.pairingMethod, dto.phone);
+    return this.pairingService.startQr(id);
   }
 
   @Post(':id/reconnect')
@@ -237,7 +205,7 @@ export class SessionsController {
   })
   @ApiOkResponse({ type: SessionResponseDto })
   reconnect(@Param('id') id: string) {
-    return this.sessions.reconnect(id);
+    return this.sessionsService.reconnect(id);
   }
 
   @Post(':id/disconnect')
@@ -250,7 +218,7 @@ export class SessionsController {
   })
   @ApiOkResponse({ type: SessionResponseDto })
   disconnect(@Param('id') id: string) {
-    return this.sessions.disconnect(id);
+    return this.sessionsService.disconnect(id);
   }
 
   @Post(':id/logout')
@@ -263,7 +231,7 @@ export class SessionsController {
   })
   @ApiOkResponse({ type: SessionResponseDto })
   logout(@Param('id') id: string) {
-    return this.sessions.logout(id);
+    return this.sessionsService.logout(id);
   }
 
   @Delete(':id')
@@ -276,6 +244,6 @@ export class SessionsController {
   })
   @ApiNoContentResponse({ description: 'Local session deleted.' })
   remove(@Param('id') id: string) {
-    return this.sessions.remove(id);
+    return this.sessionsService.remove(id);
   }
 }

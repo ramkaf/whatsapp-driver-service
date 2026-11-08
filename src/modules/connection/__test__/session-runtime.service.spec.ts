@@ -1,3 +1,4 @@
+import { PairingMethodEnum } from '../../sessions/interfaces/session.interface.ts';
 import type { WaSession } from '@libs/prisma';
 import type { WASocket } from '@whiskeysockets/baileys';
 import { SessionRuntimeService } from '../providers/session/session-runtime.service.ts';
@@ -10,7 +11,7 @@ describe('SessionRuntimeService', () => {
       id: 'one',
       retryCount: 2,
       enabled: true,
-      pairingMethod: 'QR',
+      pairingMethod: PairingMethodEnum.QR,
     } as WaSession);
 
   beforeEach(() => {
@@ -55,7 +56,7 @@ describe('SessionRuntimeService', () => {
     const runtime = create();
     runtime.qr = { value: 'qr', expiresAt: Date.now() + 100 };
     expect(service.pairing(runtime).qr).toBe('qr');
-    runtime.pairingMethod = 'CODE';
+    runtime.pairingMethod = PairingMethodEnum.CODE;
     expect(service.pairing(runtime).qr).toBeNull();
     vi.advanceTimersByTime(100);
     expect(service.pairing(runtime)).toEqual({ qr: null, expiresAt: null });
@@ -88,7 +89,7 @@ describe('SessionRuntimeService', () => {
   it('projects code expiry without claiming account logout or mutating lifecycle state', () => {
     const runtime = create();
     runtime.status = 'AWAITING_PAIRING';
-    runtime.pairingMethod = 'CODE';
+    runtime.pairingMethod = PairingMethodEnum.CODE;
     runtime.code = { value: 'secret', expiresAt: Date.now() };
     expect(service.snapshot(runtime)).toMatchObject({
       status: 'EXPIRED',

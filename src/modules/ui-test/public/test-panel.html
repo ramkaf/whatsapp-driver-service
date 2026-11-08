@@ -2328,18 +2328,44 @@
     <script>
       const $ = (id) => document.getElementById(id);
       const base = location.pathname.replace(/\/test-panel\/?$/, '');
+      const SESSION_STATUS_LABELS = {
+        CONNECTED: 'متصل',
+        CONNECTING: 'در حال اتصال',
+        RECONNECTING: 'در حال بازیابی',
+        AWAITING_PAIRING: 'نیاز به QR یا CODE',
+        AUTHENTICATING: 'در حال تأیید ورود',
+        EXPIRED: 'مهلت ورود تمام شده',
+        LOGGED_OUT: 'نیاز به ورود مجدد',
+        FAILED: 'اتصال ناموفق',
+        DISCONNECTED: 'قطع',
+      };
+      const SESSION_REASON_LABELS = {
+        SOCKET_CLOSED: 'سوکت واتساپ بسته شده است.',
+        TIMEOUT_OR_CONNECTION_LOST:
+          'ارتباط از دست رفته یا مهلت اتصال تمام شده است.',
+        LOGGED_OUT: 'دستگاه از حساب خارج شده است.',
+        CONNECTION_REPLACED:
+          'اتصال دیگری جایگزین این اتصال شده است؛ وضعیت دستگاه‌ها را بررسی کنید.',
+        INVALID_SESSION: 'سشن معتبر نیست؛ دوباره وارد شوید.',
+        MULTIDEVICE_MISMATCH: 'اطلاعات ورود ناسازگار است؛ دوباره وارد شوید.',
+        FORBIDDEN: 'واتساپ اجازهٔ اتصال نداده است؛ علت نیاز به بررسی دارد.',
+        SERVICE_UNAVAILABLE: 'سرویس واتساپ موقتاً در دسترس نیست.',
+        RESTART_REQUIRED: 'سوکت واتساپ در حال راه‌اندازی دوباره است.',
+        QR_EXPIRED: 'QR منقضی شده است.',
+        PAIRING_CODE_EXPIRED: 'کد اتصال منقضی شده است.',
+        MANUAL_DISCONNECT:
+          'اتصال دستی قطع شده است؛ برای ادامه اتصال مجدد را بزنید.',
+        MANUAL_RESTART: 'اتصال دستی در حال راه‌اندازی است.',
+        CONNECTION_STUCK: 'راه‌اندازی اتصال طولانی شده است.',
+        RETRY_LIMIT_REACHED: 'تلاش خودکار متوقف شده است؛ اتصال مجدد را بزنید.',
+        INTERNAL_ERROR: 'خطای داخلی یا ذخیره‌سازی؛ لاگ سرور را بررسی کنید.',
+        UNKNOWN_CLOSE: 'اتصال بسته شده و علت دقیق مشخص نیست.',
+      };
       let selected = '',
-        socket,
-        timer,
-        generation = 0,
-        retryTimer;
+        generation = 0;
       let rowsById = new Map(),
-        pairingBusy = false,
-        codeExpiry = 0,
-        qrExpiry = 0;
+        pairingBusy = false;
       function clearPairing() {
-        codeExpiry = 0;
-        qrExpiry = 0;
         $('pairingCode').textContent = '—';
         $('pairingExpiry').textContent = '';
         $('qr').hidden = true;
@@ -2384,26 +2410,43 @@
           );
         return number;
       }
-      async function api(path, body) {
-        if ($('token').value.length < 32)
+      async function api(path, body, token = $('token').value) {
+        if (token.length < 32)
           throw new Error('کلید مدیریت باید حداقل ۳۲ کاراکتر باشد.');
-        const response = await fetch(base + path, {
-          method: body === undefined ? 'GET' : 'POST',
-          cache: 'no-store',
-          headers: {
-            Authorization: 'Bearer ' + $('token').value,
-            'Content-Type': 'application/json',
-          },
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
-        const data = await response.json();
-        if (!response.ok)
-          throw new Error(
-            Array.isArray(data.message)
-              ? data.message.join(', ')
-              : data.message || response.status,
-          );
-        return data;
+        const controller = new AbortController();
+        const timeout = setTimeout(
+          () => controller.abort(),
+          path.endsWith('/pairing-code') ? 75000 : 10000,
+        );
+        try {
+          const response = await fetch(base + path, {
+            method: body === undefined ? 'GET' : 'POST',
+            cache: 'no-store',
+            signal: controller.signal,
+            headers: {
+              Authorization: 'Bearer ' + token,
+              'Content-Type': 'application/json',
+            },
+            body: body === undefined ? undefined : JSON.stringify(body),
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            const error = new Error(
+              Array.isArray(data.message)
+                ? data.message.join('، ')
+                : data.message || 'خطای سرور',
+            );
+            error.status = response.status;
+            throw error;
+          }
+          return data;
+        } catch (error) {
+          if (error.name === 'AbortError')
+            throw new Error('مهلت پاسخ سرور تمام شد؛ دوباره بررسی کنید.');
+          throw error;
+        } finally {
+          clearTimeout(timeout);
+        }
       }
       const numberFormat = new Intl.NumberFormat('fa-IR');
       function showTab(name) {
@@ -2518,7 +2561,6 @@
         if (!connected) setWhatsApp('unknown');
       }
       let whatsappConnected = false;
-      let streamTimeout;
       function setWhatsApp(state, label) {
         if (state === 'unknown') $('connectionDetail').textContent = '';
         const wasConnected = whatsappConnected;
@@ -2553,111 +2595,103 @@
               unknown: 'وضعیت نامشخص',
             }[state]);
       }
-      function connectStream(version) {
-        if (!selected || version !== generation) return;
-        const url = new URL(base + '/connections/events', location.origin);
-        url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const current = (socket = new WebSocket(url));
-        current.onopen = () => {
-          if (version !== generation) return current.close();
-          streamTimeout = setTimeout(() => current.close(), 40000);
-          current.send(
-            JSON.stringify({ token: $('token').value, sessionId: selected }),
-          );
-        };
-        current.onmessage = (event) => {
-          if (version !== generation) return;
-          clearTimeout(streamTimeout);
-          streamTimeout = setTimeout(() => current.close(), 40000);
-          const data = JSON.parse(event.data);
-          if (data.sessionId !== selected) return;
-          if (data.event === 'transport.status')
-            setTransport(data.data.connected, 'سوکت زنده متصل است');
-          if (data.event === 'whatsapp.status') {
-            const state = data.data;
-            const labels = {
-              CONNECTED: 'متصل',
-              CONNECTING: 'در حال اتصال…',
-              RECONNECTING: 'در حال اتصال مجدد…',
-              AWAITING_PAIRING: 'منتظر اسکن QR یا ورود کد',
-              AUTHENTICATING: 'در حال تأیید حساب…',
-              EXPIRED: 'مهلت اتصال با QR یا کد منقضی شده',
-              LOGGED_OUT: 'از حساب خارج شده؛ اتصال دوباره لازم است',
-              FAILED: 'اتصال ناموفق',
-              DISCONNECTED: 'قطع است',
-            };
-            const reasons = {
-              SOCKET_CLOSED: 'سوکت واتساپ بسته شده است',
-              TIMEOUT_OR_CONNECTION_LOST:
-                'ارتباط از دست رفته یا زمان انتظار تمام شده است',
-              LOGGED_OUT: 'دستگاه از حساب واتساپ خارج شده است',
-              CONNECTION_REPLACED: 'اتصال با اتصال دیگری جایگزین شده است',
-              INVALID_SESSION: 'اعتبار احراز هویت سشن قابل استفاده نیست',
-              MULTIDEVICE_MISMATCH: 'اطلاعات اتصال چنددستگاهی ناسازگار است',
-              FORBIDDEN: 'واتساپ اجازهٔ اتصال نداده است',
-              SERVICE_UNAVAILABLE: 'سرویس واتساپ موقتاً در دسترس نیست',
-              RESTART_REQUIRED: 'واتساپ درخواست ساخت دوبارهٔ سوکت داده است',
-              QR_EXPIRED: 'مهلت اسکن QR تمام شده است',
-              PAIRING_CODE_EXPIRED: 'کد اتصال منقضی شده است',
-              MANUAL_DISCONNECT: 'اتصال به درخواست کاربر قطع شده است',
-              MANUAL_RESTART: 'اتصال به درخواست کاربر دوباره راه‌اندازی می‌شود',
-              CONNECTION_STUCK:
-                'راه‌اندازی اتصال بیش از مهلت تعیین‌شده طول کشیده است',
-              RETRY_LIMIT_REACHED:
-                'تعداد تلاش‌های اتصال مجدد به حد مجاز رسیده است',
-              INTERNAL_ERROR: 'خطای داخلی یا ذخیره‌سازی؛ لاگ سرور بررسی شود',
-              UNKNOWN_CLOSE: 'اتصال بسته شده؛ علت دقیق مشخص نیست',
-            };
-            setWhatsApp(
-              state.connected
-                ? 'connected'
-                : ['CONNECTING', 'RECONNECTING', 'AUTHENTICATING'].includes(
-                      state.status,
-                    )
-                  ? 'connecting'
-                  : 'disconnected',
-              labels[state.status] || state.status,
-            );
-            $('connectionDetail').textContent = [
-              reasons[state.reason] || state.reason,
-              state.requiresPairing ? 'نیاز به QR یا کد اتصال دارد.' : '',
-              state.lastDisconnectCode != null
-                ? 'کد آخرین قطع: ' + state.lastDisconnectCode
-                : '',
-            ]
-              .filter(Boolean)
-              .join(' — ');
-            $('accountPhone').textContent =
-              state.connected && state.accountPhone
-                ? '+' + state.accountPhone
-                : '—';
-            $('status').textContent = JSON.stringify(state, null, 2);
-          }
-          if (data.event === 'transport.status') return;
-          log(data);
-        };
-        current.onerror = () => {
-          if (version === generation) setTransport(false, 'خطای سوکت');
-        };
-        current.onclose = (event) => {
-          if (version !== generation) return;
-          clearTimeout(streamTimeout);
-          setTransport(
-            false,
-            event.code === 1008
-              ? 'کلید مدیریت نامعتبر است یا سشن وجود ندارد'
-              : 'سوکت قطع شد؛ تلاش مجدد…',
-          );
-          if (event.code !== 1008)
-            retryTimer = setTimeout(() => connectStream(version), 3000);
-        };
+      function renderSelectedStatus(state) {
+        setWhatsApp(
+          state.connected
+            ? 'connected'
+            : ['CONNECTING', 'RECONNECTING', 'AUTHENTICATING'].includes(
+                  state.status,
+                )
+              ? 'connecting'
+              : 'disconnected',
+          SESSION_STATUS_LABELS[state.status] || state.status,
+        );
+        $('connectionDetail').textContent = [
+          SESSION_REASON_LABELS[state.reason] || state.reason,
+          state.requiresPairing ? 'نیاز به QR یا کد اتصال دارد.' : '',
+          state.lastDisconnectCode != null
+            ? 'کد آخرین قطع: ' + state.lastDisconnectCode
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' — ');
+        $('accountPhone').textContent =
+          state.connected && state.accountPhone
+            ? '+' + state.accountPhone
+            : '—';
+        $('status').textContent = JSON.stringify(state, null, 2);
+      }
+      // Details read the same account state and frames as the monitor cards.
+      function renderSelectedSession(entry) {
+        if (!selected) return;
+        const transport = entry?.transport || 'disconnected';
+        setTransport(
+          transport === 'connected',
+          {
+            connected: 'سوکت مانیتور متصل است',
+            connecting: 'سوکت مانیتور در حال اتصال است…',
+            disconnected: 'سوکت مانیتور قطع شد؛ تلاش مجدد…',
+            blocked: 'دسترسی سوکت رد شد؛ کلید یا سشن را بررسی کنید',
+          }[transport],
+        );
+        if (!entry || Date.now() - entry.lastConfirmedAt > 40000) {
+          setWhatsApp('unknown');
+          $('status').textContent = '';
+          return;
+        }
+        renderSelectedStatus(entry.status);
+        renderSelectedPairing(entry);
+      }
+      function renderSelectedPairing(entry) {
+        if (pairingBusy) return;
+        const method = $('method').value;
+        if (
+          entry.status.connected ||
+          entry.status.status === 'AUTHENTICATING'
+        ) {
+          clearPairing();
+          return;
+        }
+        if (entry.pairMode !== method) {
+          clearPairing();
+          $('qrHint').textContent =
+            'برای اعمال روش انتخاب‌شده، دکمهٔ دریافت را بزنید.';
+          return;
+        }
+        $('pairingCode').textContent = entry.code || '—';
+        $('qr').hidden = method !== 'QR' || !entry.qrImage;
+        if (method === 'QR' && entry.qrImage) {
+          if ($('qr').getAttribute('src') !== entry.qrImage)
+            $('qr').src = entry.qrImage;
+        } else $('qr').removeAttribute('src');
+        const seconds = Math.max(
+          0,
+          Math.ceil((entry.expiresAt - Date.now()) / 1000),
+        );
+        $('pairingExpiry').textContent = entry.expired
+          ? 'منقضی شد؛ دوباره درخواست دهید.'
+          : (entry.qrImage || entry.code) && seconds
+            ? 'اعتبار باقی‌مانده: ' + numberFormat.format(seconds) + ' ثانیه'
+            : '';
+        $('qrHint').textContent =
+          entry.error ||
+          (entry.busy
+            ? 'در حال دریافت اطلاعات اتصال…'
+            : method === 'CODE'
+              ? entry.code
+                ? 'کد را در واتساپ همین شماره وارد کنید.'
+                : 'برای دریافت کد، دکمهٔ دریافت را بزنید.'
+              : entry.qrImage
+                ? 'واتساپ ← دستگاه‌های متصل ← اتصال دستگاه'
+                : 'QR هنوز آماده نیست؛ برای شروع دکمهٔ دریافت را بزنید.');
+      }
+      function renderSelectedFrame(data) {
+        if (data.sessionId !== selected || data.event === 'transport.status')
+          return;
+        log(data);
       }
       function choose() {
         generation++;
-        clearTimeout(timer);
-        clearTimeout(retryTimer);
-        clearTimeout(streamTimeout);
-        socket?.close();
         selected = $('sessions').value;
         const row = rowsById.get(selected);
         $('eventSessionLabel').textContent = row
@@ -2681,40 +2715,7 @@
           ? 'در انتظار QR…'
           : 'یک شماره انتخاب کنید.';
         if (!selected) return;
-        connectStream(generation);
-        poll(generation);
-      }
-      async function poll(version) {
-        if (version !== generation) return;
-        try {
-          if ($('method').value !== 'QR' || whatsappConnected) return;
-          const qr = await api('/test-panel/' + selected + '/qr-image');
-          if (
-            version !== generation ||
-            $('method').value !== 'QR' ||
-            whatsappConnected
-          )
-            return;
-          qrExpiry = qr.expiresAt ? Date.parse(qr.expiresAt) : 0;
-          if (!qrExpiry) $('pairingExpiry').textContent = '';
-          $('qr').hidden = !qr.image;
-          if (qr.image) {
-            if ($('qr').src !== qr.image) $('qr').src = qr.image;
-          } else $('qr').removeAttribute('src');
-          $('qrHint').textContent = whatsappConnected
-            ? 'واتساپ متصل است؛ پیام جدید بفرستید.'
-            : qr.image
-              ? 'واتساپ ← دستگاه‌های متصل ← اتصال دستگاه'
-              : 'QR آماده نیست؛ برای سشن جدید دکمهٔ دریافت QR را بزنید.';
-        } catch (error) {
-          if (version === generation) {
-            $('error').textContent = error.message;
-            $('qr').hidden = true;
-          }
-        } finally {
-          if (version === generation)
-            timer = setTimeout(() => poll(version), 2000);
-        }
+        window.dispatchEvent(new CustomEvent('selected-session-change'));
       }
       $('load').onclick = () => run(() => load());
       $('sessions').onchange = choose;
@@ -2749,6 +2750,7 @@
           } finally {
             pairingBusy = false;
             updatePairingControls();
+            window.dispatchEvent(new CustomEvent('selected-session-change'));
           }
         });
       for (const action of ['reconnect', 'disconnect'])
@@ -2788,7 +2790,6 @@
         }
         if (method === 'CODE') {
           $('pairingCode').textContent = result.code;
-          codeExpiry = Date.parse(result.expiresAt);
           $('qrHint').textContent =
             'کد را در واتساپ همان شماره وارد کنید. کد را با دیگران به اشتراک نگذارید.';
         }
@@ -2808,6 +2809,7 @@
           } finally {
             pairingBusy = false;
             updatePairingControls();
+            window.dispatchEvent(new CustomEvent('selected-session-change'));
           }
         });
       $('method').onchange = () => {
@@ -2816,18 +2818,6 @@
         $('qrHint').textContent =
           'برای شروع روش انتخاب‌شده، دکمهٔ دریافت را بزنید.';
       };
-      const expiryTimer = setInterval(() => {
-        const expires = $('method').value === 'CODE' ? codeExpiry : qrExpiry;
-        if (!expires) return;
-        const seconds = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
-        $('pairingExpiry').textContent = seconds
-          ? 'اعتبار باقی‌مانده: ' + seconds + ' ثانیه'
-          : 'منقضی شد؛ دوباره درخواست دهید.';
-        if (!seconds) {
-          $('pairingCode').textContent = '—';
-          $('qr').hidden = true;
-        }
-      }, 1000);
       updatePairingControls();
       $('clear').onclick = clearEvents;
       $('eventSearch').oninput = filterEvents;
@@ -2864,21 +2854,22 @@
       }
       showTab(location.hash.replace(/^#|\-tab$/g, ''));
       window.addEventListener('beforeunload', () => {
-        clearInterval(expiryTimer);
-        clearTimeout(streamTimeout);
         generation++;
-        clearTimeout(timer);
-        clearTimeout(retryTimer);
-        socket?.close();
       });
     </script>
     <script id="session-monitor-core">
       // Each account owns its stream, reception counters, and pairing requests.
       class WaSessionMonitor {
-        constructor({ request, createSocket, onChange = () => {} }) {
+        constructor({
+          request,
+          createSocket,
+          onChange = () => {},
+          onFrame = () => {},
+        }) {
           this.request = request;
           this.createSocket = createSocket;
           this.onChange = onChange;
+          this.onFrame = onFrame;
           this.entries = new Map();
           this.token = '';
           this.active = false;
@@ -3047,7 +3038,12 @@
             } catch {
               return;
             }
-            if (frame.sessionId !== entry.row.id) return;
+            if (
+              !frame ||
+              typeof frame !== 'object' ||
+              frame.sessionId !== entry.row.id
+            )
+              return;
             deadline();
             if (
               frame.event === 'subscribed' ||
@@ -3060,6 +3056,7 @@
               entry.lastConfirmedAt = Date.now();
             if (frame.event === 'messages.upsert')
               this.receive(entry, frame.data?.messages);
+            this.onFrame(frame);
             this.onChange(this);
           };
           socket.onerror = () => {
@@ -3321,40 +3318,7 @@
     <script id="session-monitor-view">
       (() => {
         const views = new Map();
-        const labels = {
-          CONNECTED: 'متصل',
-          CONNECTING: 'در حال اتصال',
-          RECONNECTING: 'در حال بازیابی',
-          AWAITING_PAIRING: 'نیاز به QR یا CODE',
-          AUTHENTICATING: 'در حال تأیید ورود',
-          EXPIRED: 'مهلت ورود تمام شده',
-          LOGGED_OUT: 'نیاز به ورود مجدد',
-          FAILED: 'اتصال ناموفق',
-          DISCONNECTED: 'قطع',
-        };
-        const reasons = {
-          SOCKET_CLOSED: 'سوکت واتساپ بسته شده است.',
-          TIMEOUT_OR_CONNECTION_LOST:
-            'ارتباط از دست رفته یا مهلت اتصال تمام شده است.',
-          LOGGED_OUT: 'دستگاه از حساب خارج شده است.',
-          CONNECTION_REPLACED:
-            'اتصال دیگری جایگزین این اتصال شده است؛ وضعیت دستگاه‌ها را بررسی کنید.',
-          INVALID_SESSION: 'سشن معتبر نیست؛ دوباره وارد شوید.',
-          MULTIDEVICE_MISMATCH: 'اطلاعات ورود ناسازگار است؛ دوباره وارد شوید.',
-          FORBIDDEN: 'واتساپ اجازهٔ اتصال نداده است؛ علت نیاز به بررسی دارد.',
-          SERVICE_UNAVAILABLE: 'سرویس واتساپ موقتاً در دسترس نیست.',
-          RESTART_REQUIRED: 'سوکت واتساپ در حال راه‌اندازی دوباره است.',
-          QR_EXPIRED: 'QR منقضی شده است.',
-          PAIRING_CODE_EXPIRED: 'کد اتصال منقضی شده است.',
-          MANUAL_DISCONNECT:
-            'اتصال دستی قطع شده است؛ برای ادامه اتصال مجدد را بزنید.',
-          MANUAL_RESTART: 'اتصال دستی در حال راه‌اندازی است.',
-          CONNECTION_STUCK: 'راه‌اندازی اتصال طولانی شده است.',
-          RETRY_LIMIT_REACHED:
-            'تلاش خودکار متوقف شده است؛ اتصال مجدد را بزنید.',
-          INTERNAL_ERROR: 'خطای داخلی یا ذخیره‌سازی؛ لاگ سرور را بررسی کنید.',
-          UNKNOWN_CLOSE: 'اتصال بسته شده و علت دقیق مشخص نیست.',
-        };
+
         const text = (node, value) => {
           if (node.textContent !== value) node.textContent = value;
         };
@@ -3364,42 +3328,6 @@
         };
         const formatTime = (value) =>
           new Date(value).toLocaleTimeString('fa-IR');
-        async function request(path, body, token) {
-          const controller = new AbortController();
-          const timeout = setTimeout(
-            () => controller.abort(),
-            path.endsWith('/pairing-code') ? 75000 : 10000,
-          );
-          try {
-            const response = await fetch(base + path, {
-              method: body === undefined ? 'GET' : 'POST',
-              cache: 'no-store',
-              signal: controller.signal,
-              headers: {
-                Authorization: 'Bearer ' + token,
-                'Content-Type': 'application/json',
-              },
-              body: body === undefined ? undefined : JSON.stringify(body),
-            });
-            const data = await response.json();
-            if (!response.ok) {
-              const error = new Error(
-                Array.isArray(data.message)
-                  ? data.message.join('، ')
-                  : data.message || 'خطای سرور',
-              );
-              error.status = response.status;
-              throw error;
-            }
-            return data;
-          } catch (error) {
-            if (error.name === 'AbortError')
-              throw new Error('مهلت پاسخ سرور تمام شد؛ دوباره بررسی کنید.');
-            throw error;
-          } finally {
-            clearTimeout(timeout);
-          }
-        }
         function createView(entry, monitor) {
           const root = $(
             'monitorAccountTemplate',
@@ -3495,7 +3423,7 @@
             text(
               fields.whatsapp,
               fresh
-                ? labels[state.status] || 'نامشخص'
+                ? SESSION_STATUS_LABELS[state.status] || 'نامشخص'
                 : 'نامشخص؛ وضعیت تازه نیست',
             );
             fields.whatsapp.dataset.state = active ? 'good' : 'bad';
@@ -3537,8 +3465,10 @@
             else if (!state.connected)
               warnings.push(
                 'واتساپ: ' +
-                  (labels[state.status] || 'نامشخص') +
-                  (reasons[state.reason] ? '\n' + reasons[state.reason] : ''),
+                  (SESSION_STATUS_LABELS[state.status] || 'نامشخص') +
+                  (SESSION_REASON_LABELS[state.reason]
+                    ? '\n' + SESSION_REASON_LABELS[state.reason]
+                    : ''),
               );
             alert(fields.alert, warnings.join('\n'));
             const silenceSince = Math.max(
@@ -3630,6 +3560,7 @@
                 ? 'مرورگر آفلاین است؛ مانیتور زنده در دسترس نیست.'
                 : ''),
           );
+          renderSelectedSession(monitor.entries.get(selected));
           document.title =
             monitor.active && connected < monitor.entries.size
               ? '⚠ ' +
@@ -3638,13 +3569,14 @@
               : 'مانیتور سشن‌های واتساپ';
         }
         const monitor = new WaSessionMonitor({
-          request,
+          request: api,
           createSocket: () => {
             const url = new URL(base + '/connections/events', location.origin);
             url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
             return new WebSocket(url);
           },
           onChange: render,
+          onFrame: renderSelectedFrame,
         });
         window.addEventListener('sessions-loaded', (event) =>
           monitor.start(event.detail.rows, event.detail.token),
@@ -3693,6 +3625,9 @@
           } else void monitor.pollQr(entry);
           monitor.tick();
         });
+        window.addEventListener('selected-session-change', () =>
+          renderSelectedSession(monitor.entries.get(selected)),
+        );
         $('monitorRefresh').onclick = () => monitor.refresh();
         $('monitorSilence').oninput = () => render(monitor);
         $('token').addEventListener('input', () => {

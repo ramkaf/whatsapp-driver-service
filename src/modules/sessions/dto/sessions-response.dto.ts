@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { WaPairingMethod, WaSessionStatus } from '@libs/prisma';
+import { WaSessionStatus } from '@libs/prisma';
 import { CONNECTION_REASONS } from '../../connection/interfaces/connection-status.ts';
+import { PairingMethodEnum } from '../interfaces/session.interface.ts';
 
 export class RuntimeStatusDto {
   @ApiProperty({
@@ -78,7 +79,7 @@ export class SessionResponseDto {
   @ApiProperty({ example: 'WhatsApp 01' }) name: string;
   @ApiProperty({ type: String, nullable: true, example: '989121234567' })
   phone: string | null;
-  @ApiProperty({ enum: WaPairingMethod, enumName: 'PairingMethod' })
+  @ApiProperty({ enum: PairingMethodEnum, enumName: 'PairingMethod' })
   pairingMethod: string;
   @ApiProperty({
     example: true,
@@ -149,7 +150,7 @@ export class PairingCodeResponseDto {
 
 export class QrResponseDto {
   @ApiProperty({ example: 'cmh1234560000sessionexample' }) sessionId: string;
-  @ApiProperty({ enum: WaPairingMethod, enumName: 'PairingMethod' })
+  @ApiProperty({ enum: PairingMethodEnum, enumName: 'PairingMethod' })
   pairingMethod: string;
   @ApiProperty({ enum: WaSessionStatus, enumName: 'SessionStatus' })
   status: string;

@@ -3,6 +3,7 @@ import { SessionsService } from '../providers/sessions.service.ts';
 import type { IAppConfig } from '@libs/common';
 import type { SessionRepository } from '../session.repository.ts';
 import type { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
+import { PairingMethodEnum } from '../interfaces/session.interface.ts';
 
 function fixture(max = 50) {
   const rows: Record<string, unknown>[] = [];
@@ -36,7 +37,7 @@ describe('SessionsService', () => {
     const result = await service.create({
       name: 'WhatsApp 01',
       phone: '+98 912 123 4567',
-      pairingMethod: 'CODE',
+      pairingMethod: PairingMethodEnum.CODE,
     });
     expect(repository.create).toHaveBeenCalledWith({
       name: 'WhatsApp 01',
@@ -49,8 +50,8 @@ describe('SessionsService', () => {
   it('enforces the process session limit under concurrent creates', async () => {
     const { service, repository } = fixture(1);
     const results = await Promise.allSettled([
-      service.create({ name: 'one', pairingMethod: 'QR' }),
-      service.create({ name: 'two', pairingMethod: 'QR' }),
+      service.create({ name: 'one', pairingMethod: PairingMethodEnum.QR }),
+      service.create({ name: 'two', pairingMethod: PairingMethodEnum.QR }),
     ]);
     expect(results.map((result) => result.status)).toEqual([
       'fulfilled',

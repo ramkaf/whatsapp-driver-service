@@ -21,7 +21,10 @@ export class SessionsService {
 
   async create(dto: CreateSessionDto) {
     return this.creation.run('create', async () => {
-      if ((await this.sessionRepository.count()) >= this.config.whatsapp.maxSessions)
+      if (
+        (await this.sessionRepository.count()) >=
+        this.config.whatsapp.maxSessions
+      )
         throw new ConflictException('Session limit reached');
       const row = await this.sessionRepository.create({
         name: dto.name,

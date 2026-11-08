@@ -25,10 +25,6 @@ export class RealtimeService implements OnModuleDestroy {
       /\/+/g,
       '/',
     );
-    const legacyPath = path.replace(
-      '/connections/events',
-      '/test-panel/events',
-    );
     this.server = new WebSocketServer({ noServer: true, maxPayload: 4096 });
     this.monitor = setInterval(() => {
       for (const [client, id] of this.subscriptions)
@@ -58,7 +54,7 @@ export class RealtimeService implements OnModuleDestroy {
     http.on('upgrade', (request, socket, head) => {
       const requestedPath = new URL(request.url ?? '/', 'http://localhost')
         .pathname;
-      if (requestedPath !== path && requestedPath !== legacyPath) {
+      if (requestedPath !== path) {
         socket.destroy();
         return;
       }

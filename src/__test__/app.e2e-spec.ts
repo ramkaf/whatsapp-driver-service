@@ -162,13 +162,19 @@ describe('Session administration API (e2e, external services mocked)', () => {
       .auth(token, { type: 'bearer' })
       .send({})
       .expect(200);
-    expect(manager.preparePairing).toHaveBeenCalledWith(
-      'session-one',
-      'QR',
-      undefined,
-    );
+    expect(manager.preparePairing).toHaveBeenCalledWith('session-one', 'QR');
     expect(response.body.qr).toBe('raw-qr-string');
     expect(response.headers['cache-control']).toBe('no-store');
+  });
+
+  it('does not expose a separate pairing-method endpoint', async () => {
+    await create('QR').expect(201);
+    await request(app.getHttpServer())
+      .post('/sessions/session-one/pairing-method')
+      .auth(token, { type: 'bearer' })
+      .send({ pairingMethod: 'CODE', phone: '989121234567' })
+      .expect(404);
+    expect(manager.preparePairing).not.toHaveBeenCalled();
   });
 
   it('requires valid phone numbers for CODE while QR may omit a phone', async () => {
@@ -241,9 +247,13 @@ describe('Session administration API (e2e, external services mocked)', () => {
   it('exposes status, aggregate health and lifecycle controls', async () => {
     await create().expect(201);
     await request(app.getHttpServer())
-      .get('/sessions/session-one/status')
+      .get('/sessions/session-one')
       .auth(token, { type: 'bearer' })
       .expect(200);
+    await request(app.getHttpServer())
+      .get('/sessions/session-one/status')
+      .auth(token, { type: 'bearer' })
+      .expect(404);
     const health = await request(app.getHttpServer())
       .get('/health')
       .auth(token, { type: 'bearer' })

@@ -120,18 +120,18 @@ describe('RealtimeService without network transport', () => {
     vi.useRealTimers();
   });
 
-  it.each(['/api/connections/events', '/api/test-panel/events'])(
-    'accepts the current and legacy route: %s',
+  it('accepts the connection events route', () => {
+    const { socket } = connect();
+    expect(socket.destroy).not.toHaveBeenCalled();
+    expect(server.handleUpgrade).toHaveBeenCalledOnce();
+  });
+  it.each(['/wrong', '/', '/api/test-panel/events'])(
+    'rejects unknown or retired routes: %s',
     (url) => {
-      const { socket } = connect({ url });
-      expect(socket.destroy).not.toHaveBeenCalled();
-      expect(server.handleUpgrade).toHaveBeenCalledOnce();
+      expect(connect({ url }).socket.destroy).toHaveBeenCalledOnce();
+      expect(server.handleUpgrade).not.toHaveBeenCalled();
     },
   );
-  it.each(['/wrong', '/'])('rejects unknown routes: %s', (url) => {
-    expect(connect({ url }).socket.destroy).toHaveBeenCalledOnce();
-    expect(server.handleUpgrade).not.toHaveBeenCalled();
-  });
   it.each(['https://localhost', 'https://allowed.example'])(
     'accepts an allowed origin: %s',
     (origin) => {

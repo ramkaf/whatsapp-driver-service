@@ -33,11 +33,12 @@ import type { WaSession } from '@libs/prisma';
 import { AuthStateService } from '../../../auth-state/providers/auth-state.service.ts';
 import { SessionRepository } from '../../../sessions/session.repository.ts';
 import { SocketFactoryService } from '../socket/socket-factory.service.ts';
-import { ConnectionHandlerService } from '../events/connection-handler.service.ts';
 import { ConnectionSupervisorService } from '../recovery/connection-supervisor.service.ts';
 import { SessionQueue } from '../../session-queue.ts';
 import type { SessionRuntime } from '../../interfaces/session-runtime.ts';
 import { CONNECTION_REASONS } from '../../interfaces/connection-status.ts';
+import { PairingMethodEnum } from '../../../sessions/interfaces/session.interface.ts';
+import { classifyDisconnect } from '../../utils/disconnect-classifier.util.ts';
 
 // Orchestrates serialized session commands, pairing, and bounded connection recovery.
 @Injectable()
@@ -57,7 +58,6 @@ export class SessionManagerService
     @Inject(AuthStateService) private readonly authStore: SessionAuthentication,
     @Inject(SocketFactoryService)
     private readonly factory: SessionSocketFactory,
-    private readonly handler: ConnectionHandlerService,
     private readonly supervisor: ConnectionSupervisorService,
     @Inject(configuer.KEY) private readonly config: IAppConfig,
     private readonly runtimeState: SessionRuntimeService,
@@ -232,12 +232,11 @@ export class SessionManagerService
     runtime: SessionRuntime,
     update: Partial<ConnectionState>,
   ): Promise<void> {
-    const event = this.handler.process(update);
     runtime.lastActivityAt = Date.now();
-    if (event.qr && !runtime.auth?.state.creds.me?.id) {
+    if (update.qr && !runtime.auth?.state.creds.me?.id) {
       runtime.pairingReady = true;
       runtime.qr = {
-        value: event.qr,
+        value: update.qr,
         expiresAt: Date.now() + this.config.whatsapp.pairingTtlMs,
       };
       this.runtimeState.state(runtime, 'AWAITING_PAIRING');
@@ -245,7 +244,7 @@ export class SessionManagerService
         status: 'AWAITING_PAIRING',
       });
     }
-    if (event.authenticating) {
+    if (update.isNewLogin === true) {
       runtime.qr = null;
       runtime.code = null;
       this.runtimeState.state(runtime, 'AUTHENTICATING');
@@ -256,9 +255,9 @@ export class SessionManagerService
         'PAIRING_COMPLETED',
       );
     }
-    if (event.connection === 'connecting' && runtime.status === 'CONNECTING')
+    if (update.connection === 'connecting' && runtime.status === 'CONNECTING')
       runtime.pairingReady = true;
-    if (event.connection === 'open') {
+    if (update.connection === 'open') {
       if (!runtime.auth?.state.creds.me?.id)
         throw new Error('Connected socket has no authenticated identity');
       await runtime.auth.saveCreds();
@@ -287,8 +286,8 @@ export class SessionManagerService
       );
       this.logger.log({ sessionId: runtime.sessionId, event: 'connected' });
     }
-    if (event.connection === 'close') {
-      const decision = event.disconnect!;
+    if (update.connection === 'close') {
+      const decision = classifyDisconnect(update.lastDisconnect?.error);
       this.runtimeState.recordDisconnect(
         runtime,
         decision.reason,
@@ -515,7 +514,7 @@ export class SessionManagerService
 
   async preparePairing(
     id: string,
-    method: 'CODE' | 'QR',
+    method: PairingMethodEnum,
     phone?: string,
   ): Promise<void> {
     await this.queue.run(id, async () => {

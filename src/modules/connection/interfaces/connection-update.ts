@@ -1,4 +1,3 @@
-import type { ConnectionState } from '@whiskeysockets/baileys';
 import type { CONNECTION_REASONS } from './connection-status.ts';
 
 export enum DisconnectAction {
@@ -19,10 +18,3 @@ export interface DisconnectRule {
   action: DisconnectAction;
   reason: CONNECTION_REASONS;
 }
-export interface ProcessedConnectionUpdate {
-  qr?: string;
-  authenticating: boolean;
-  connection?: ConnectionState['connection'];
-  disconnect: DisconnectInfo | null;
-}
-
