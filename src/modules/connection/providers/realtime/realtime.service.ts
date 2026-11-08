@@ -8,7 +8,7 @@ import type { IAppConfig } from '@libs/common';
 import type { ConnectionStatusSource } from '../../interfaces/session-results.ts';
 export type { ConnectionStatusSource } from '../../interfaces/session-results.ts';
 
-// Authenticates WebSocket subscriptions and broadcasts session status and messages.
+/** Handles realtime authentication, session status polling, and event delivery in one service. */
 @Injectable()
 export class RealtimeService implements OnModuleDestroy {
   private server?: WebSocketServer;
@@ -19,6 +19,7 @@ export class RealtimeService implements OnModuleDestroy {
   private heartbeat?: ReturnType<typeof setInterval>;
   constructor(@Inject(configuer.KEY) private readonly config: IAppConfig) {}
 
+  /** Attaches WebSocket to HTTP, polls session status every second, and checks liveness every 15 seconds. */
   attach(http: Server, source: ConnectionStatusSource): void {
     const path = `/${this.config.apiPrefix}/connections/events`.replace(
       /\/+/g,
@@ -61,7 +62,7 @@ export class RealtimeService implements OnModuleDestroy {
         socket.destroy();
         return;
       }
-      // Browser connections must come from this application, not another site.
+      // Browser origins must match the request host or appear in the allowed origins list.
       if (request.headers.origin) {
         try {
           const origin = request.headers.origin;
@@ -155,6 +156,7 @@ export class RealtimeService implements OnModuleDestroy {
     });
   }
 
+  /** Sends public session status, skips duplicates, and closes clients with over one megabyte queued. */
   private sendStatus(
     client: WebSocket,
     sessionId: string,
@@ -195,8 +197,9 @@ export class RealtimeService implements OnModuleDestroy {
     }
   }
 
+  /** Sends events only to subscribers of the target session and converts BigInt values to strings for JSON. */
   publish(sessionId: string, event: string, data: unknown): void {
-    // Serialize only selected public events, never the WASocket/auth object.
+    // Only pass public event data here; never pass the WhatsApp socket or authentication state.
     let payload: string;
     try {
       payload = JSON.stringify(
@@ -218,6 +221,7 @@ export class RealtimeService implements OnModuleDestroy {
     }
   }
 
+  /** Stops polling and heartbeat timers and closes WebSocket connections during shutdown. */
   onModuleDestroy(): void {
     clearInterval(this.monitor);
     clearInterval(this.heartbeat);
