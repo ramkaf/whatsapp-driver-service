@@ -4,7 +4,14 @@ import type { SocketFactoryService } from '../providers/socket/socket-factory.se
 
 export interface SessionPersistence extends Pick<
   SessionRepository,
-  'require' | 'update' | 'transition' | 'recoverable' | 'remove'
+  | 'require'
+  | 'update'
+  | 'transition'
+  | 'recoverable'
+  | 'remove'
+  | 'currentByPhone'
+  | 'countEnabledSessions'
+  | 'replaceCurrent'
 > {}
 
 export interface SessionAuthentication extends Pick<
@@ -14,5 +21,5 @@ export interface SessionAuthentication extends Pick<
 
 export interface SessionSocketFactory extends Pick<
   SocketFactoryService,
-  'create'
+  'create' | 'release'
 > {}

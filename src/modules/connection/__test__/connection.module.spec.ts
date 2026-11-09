@@ -1,3 +1,4 @@
+import { ConnectionMessageSource } from '../interfaces/message-event-source.ts';
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import type { Provider } from '@nestjs/common';
@@ -17,7 +18,7 @@ describe('ConnectionModule', () => {
     const module = await Test.createTestingModule({
       providers: [
         ...providers,
-        { provide: configuer.KEY, useValue: { whatsapp: { maxRetries: 3 } } },
+        { provide: configuer.KEY, useValue: { whatsapp: {} } },
         { provide: AuthStateService, useValue: {} },
         { provide: SessionRepository, useValue: {} },
       ],
@@ -30,6 +31,7 @@ describe('ConnectionModule', () => {
       expect(Reflect.getMetadata('exports', ConnectionModule)).toEqual([
         SessionManagerService,
         RealtimeService,
+        ConnectionMessageSource,
       ]);
     } finally {
       await module.close();

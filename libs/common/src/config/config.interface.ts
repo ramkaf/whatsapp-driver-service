@@ -4,6 +4,7 @@ import type { EEnvironment } from './config.enum.ts';
 export interface IAppConfig {
   whatsapp: IWhatsAppConfig;
   redis: IRedisConfig;
+  minio: IMinoConfig;
   databaseUrl?: string;
   nodeEnv: EEnvironment;
   name: string;
@@ -29,7 +30,6 @@ export interface IRedisConfig {
 export interface IWhatsAppConfig {
   adminApiKey: string;
   maxSessions: number;
-  maxRetries: number;
   startupConcurrency: number;
   startupStaggerMs: number;
   watchdogIntervalMs: number;
@@ -38,4 +38,13 @@ export interface IWhatsAppConfig {
   pairingTtlMs: number;
   pairingCodeTtlMs: number;
   pairingRateLimitMs: number;
+}
+
+export interface IMinoConfig {
+  endpoint: string;
+  port: number;
+  useSsl: boolean;
+  accessKey: string;
+  secretKey: string;
+  bucket: string;
 }

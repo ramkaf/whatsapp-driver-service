@@ -40,7 +40,7 @@ import { CONNECTION_REASONS } from '../../interfaces/connection-status.ts';
 import { PairingMethodEnum } from '../../../sessions/interfaces/session.interface.ts';
 import { classifyDisconnect } from '../../utils/disconnect-classifier.util.ts';
 
-// Orchestrates serialized session commands, pairing, and bounded connection recovery.
+// Orchestrates serialized session commands, pairing, and connection recovery.
 @Injectable()
 export class SessionManagerService
   implements OnApplicationBootstrap, OnModuleDestroy
@@ -48,6 +48,8 @@ export class SessionManagerService
   private readonly logger = new Logger(SessionManagerService.name);
   private readonly runtimes = new Map<string, SessionRuntime>();
   private readonly queue = new SessionQueue();
+  private readonly phones = new SessionQueue();
+  private readonly sessionPhones = new Map<string, string>();
   private stopping = false;
   private restored = false;
   private recovery: Promise<void> | null = null;
@@ -65,14 +67,99 @@ export class SessionManagerService
   ) {}
 
   private runtime(row: WaSession): SessionRuntime {
+    this.sessionPhones.set(row.id, row.phone);
     let runtime = this.runtimes.get(row.id);
     if (!runtime) {
-      if (this.runtimes.size >= this.config.whatsapp.maxSessions)
+      if (
+        row.isEnabled &&
+        [...this.runtimes.values()].filter((entry) => !entry.intentionalStop)
+          .length >= this.config.whatsapp.maxSessions
+      )
         throw new ConflictException('Session limit reached');
       runtime = this.runtimeState.create(row);
       this.runtimes.set(row.id, runtime);
     }
     return runtime;
+  }
+
+  // Account commands share a lock with replacement, even when their row IDs differ.
+  private command<T>(id: string, work: () => Promise<T>): Promise<T> {
+    const enqueue = (phone: string) =>
+      this.phones.run(phone, () =>
+        this.queue.run(id, async () => {
+          await this.repository.require(id);
+          return work();
+        }),
+      );
+    const phone = this.sessionPhones.get(id);
+    if (phone) return enqueue(phone);
+    return this.repository.require(id).then((row) => enqueue(row.phone));
+  }
+
+  async replace(
+    data: Pick<WaSession, 'name' | 'phone' | 'pairingMethod'>,
+    maxSessions: number,
+  ): Promise<WaSession> {
+    return this.phones.run(data.phone, async () => {
+      if (this.stopping)
+        throw new ServiceUnavailableException('Application is shutting down');
+      const existing = await this.repository.currentByPhone(data.phone);
+      const count = await this.repository.countEnabledSessions();
+      if (count - (existing?.isEnabled ? 1 : 0) >= maxSessions)
+        throw new ConflictException('Session limit reached');
+      const previous = existing ? this.runtimes.get(existing.id) : undefined;
+      const resumePrevious = existing?.isEnabled && !previous?.intentionalStop;
+      if (previous) {
+        await this.queue.run(previous.sessionId, async () => {
+          previous.intentionalStop = true;
+          try {
+            await this.lifecycle.teardown(previous);
+          } catch {
+            await this.failLocked(
+              previous,
+              'Authentication cleanup failed during replacement',
+            );
+            throw new ServiceUnavailableException(
+              'Authentication cleanup failed; replacement aborted',
+            );
+          }
+          this.runtimeState.state(previous, 'DISCONNECTED');
+        });
+      }
+      let row: WaSession;
+      try {
+        row = await this.repository.replaceCurrent(data, maxSessions);
+      } catch (error) {
+        // A failed insert rolls back retirement; restore the previous account's socket.
+        if (previous && resumePrevious) {
+          previous.intentionalStop = false;
+          try {
+            await this.queue.run(previous.sessionId, () =>
+              this.startLocked(previous),
+            );
+          } catch {
+            this.logger.error({
+              sessionId: previous.sessionId,
+              event: 'replacement_restore_failed',
+            });
+          }
+        }
+        throw error;
+      }
+      if (existing) {
+        this.runtimes.delete(existing.id);
+        this.sessionPhones.delete(existing.id);
+      }
+      try {
+        await this.queue.run(row.id, () => this.startLocked(this.runtime(row)));
+      } catch {
+        this.logger.warn({
+          sessionId: row.id,
+          event: 'initial_connection_failed',
+        });
+      }
+      return row;
+    });
   }
 
   private current(runtime: SessionRuntime, generation: number): boolean {
@@ -84,7 +171,7 @@ export class SessionManagerService
   }
 
   async start(id: string, manual = false): Promise<void> {
-    return this.queue.run(id, async () => {
+    return this.command(id, async () => {
       if (this.stopping)
         throw new ServiceUnavailableException('Application is shutting down');
       const row = await this.repository.require(id);
@@ -92,11 +179,15 @@ export class SessionManagerService
         throw new ConflictException('Pairing is required after logout');
       const runtime = this.runtime(row);
       if (manual) {
-        await this.repository.update(id, { enabled: true, retryCount: 0 });
+        await this.repository.update(id, { isEnabled: true, retryCount: 0 });
         runtime.retryCount = 0;
         runtime.intentionalStop = false;
       }
-      if ((!row.enabled && !manual) || runtime.socket || runtime.reconnectTimer)
+      if (
+        (!row.isEnabled && !manual) ||
+        runtime.socket ||
+        runtime.reconnectTimer
+      )
         return;
       await this.startLocked(runtime);
     });
@@ -128,6 +219,7 @@ export class SessionManagerService
         runtime.sessionId,
         auth.state,
         this.config.whatsapp.pairingTtlMs,
+        () => this.current(runtime, generation) && !!runtime.socket?.ws.isOpen,
       );
       runtime.socket = socket;
       const credsUpdated = (update: Partial<AuthenticationCreds>) => {
@@ -145,28 +237,27 @@ export class SessionManagerService
       };
       const connectionUpdated = (update: Partial<ConnectionState>) => {
         if (!this.current(runtime, generation)) return;
-        void this.queue
-          .run(runtime.sessionId, async () => {
-            if (!this.current(runtime, generation)) return;
-            try {
-              await this.handle(runtime, update);
-            } catch {
-              await this.failLocked(
-                runtime,
-                'Connection state or authentication persistence failed',
-              );
-            }
-          })
-          .catch(() =>
-            this.logger.error({
-              sessionId: runtime.sessionId,
-              event: 'connection_event_failed',
-            }),
-          );
+        void this.command(runtime.sessionId, async () => {
+          if (!this.current(runtime, generation)) return;
+          try {
+            await this.handle(runtime, update);
+          } catch {
+            await this.failLocked(
+              runtime,
+              'Connection state or authentication persistence failed',
+            );
+          }
+        }).catch(() =>
+          this.logger.error({
+            sessionId: runtime.sessionId,
+            event: 'connection_event_failed',
+          }),
+        );
       };
       socket.ev.on('creds.update', credsUpdated);
       socket.ev.on('connection.update', connectionUpdated);
       runtime.dispose = () => {
+        this.factory.release(socket);
         socket.ev.off('creds.update', credsUpdated);
         socket.ev.off('connection.update', connectionUpdated);
       };
@@ -191,25 +282,22 @@ export class SessionManagerService
       event: 'session_failure',
       reason,
     });
-    void this.queue
-      .run(runtime.sessionId, async () => {
-        if (this.current(runtime, generation))
-          await this.failLocked(runtime, reason);
-      })
-      .catch(() =>
-        this.logger.error({
-          sessionId: runtime.sessionId,
-          event: 'failure_state_write_failed',
-        }),
-      );
+    void this.command(runtime.sessionId, async () => {
+      if (this.current(runtime, generation))
+        await this.failLocked(runtime, reason);
+    }).catch(() =>
+      this.logger.error({
+        sessionId: runtime.sessionId,
+        event: 'failure_state_write_failed',
+      }),
+    );
   }
 
   private async failLocked(
     runtime: SessionRuntime,
     reason: string,
-    reasonCode: CONNECTION_REASONS = CONNECTION_REASONS.INTERNAL_ERROR,
   ): Promise<void> {
-    runtime.reason = reasonCode;
+    runtime.reason = CONNECTION_REASONS.INTERNAL_ERROR;
     runtime.intentionalStop = true;
     try {
       await this.lifecycle.teardown(runtime);
@@ -348,14 +436,6 @@ export class SessionManagerService
       runtime.retryCount,
       restartRequired,
     );
-    if (milliseconds === null) {
-      await this.failLocked(
-        runtime,
-        'Reconnect threshold reached',
-        CONNECTION_REASONS.RETRY_LIMIT_REACHED,
-      );
-      return;
-    }
     runtime.retryCount++;
     runtime.nextRetryAt = Date.now() + milliseconds;
     this.runtimeState.state(runtime, 'RECONNECTING');
@@ -390,14 +470,14 @@ export class SessionManagerService
   }
 
   async restart(id: string): Promise<void> {
-    await this.queue.run(id, async () => {
+    await this.command(id, async () => {
       if (this.stopping)
         throw new ServiceUnavailableException('Application is shutting down');
       const row = await this.repository.require(id);
       if (row.status === 'LOGGED_OUT')
         throw new ConflictException('Pairing is required after logout');
       const runtime = this.runtime(row);
-      await this.repository.update(id, { enabled: true, retryCount: 0 });
+      await this.repository.update(id, { isEnabled: true, retryCount: 0 });
       this.runtimeState.recordDisconnect(
         runtime,
         CONNECTION_REASONS.MANUAL_RESTART,
@@ -420,7 +500,7 @@ export class SessionManagerService
   }
 
   async stop(id: string): Promise<void> {
-    await this.queue.run(id, async () => {
+    await this.command(id, async () => {
       const row = await this.repository.require(id);
       const runtime = this.runtime(row);
       const status =
@@ -428,7 +508,7 @@ export class SessionManagerService
       await this.repository.transition(
         id,
         {
-          enabled: false,
+          isEnabled: false,
           status,
           lastDisconnectedAt: new Date(),
         },
@@ -458,7 +538,7 @@ export class SessionManagerService
   }
 
   async logout(id: string): Promise<void> {
-    await this.queue.run(id, async () => {
+    await this.command(id, async () => {
       const row = await this.repository.require(id);
       const runtime = this.runtime(row);
       if (
@@ -470,7 +550,7 @@ export class SessionManagerService
           'Connect the session before requesting remote logout',
         );
       }
-      await this.repository.update(id, { enabled: false });
+      await this.repository.update(id, { isEnabled: false });
       runtime.intentionalStop = true;
       this.lifecycle.cancelRetry(runtime);
       try {
@@ -493,7 +573,7 @@ export class SessionManagerService
       this.runtimeState.state(runtime, 'LOGGED_OUT');
       await this.repository.transition(
         id,
-        { status: 'LOGGED_OUT', enabled: false },
+        { status: 'LOGGED_OUT', isEnabled: false },
         'CONNECTION_CLOSED',
         { reason: 'intentional_logout' },
       );
@@ -501,15 +581,8 @@ export class SessionManagerService
   }
 
   async remove(id: string): Promise<void> {
-    await this.queue.run(id, async () => {
-      const runtime = this.runtime(await this.repository.require(id));
-      await this.repository.update(id, { enabled: false });
-      runtime.intentionalStop = true;
-      await this.lifecycle.teardown(runtime);
-      // Local deletion only. WhatsApp unlinking is a separate explicit action.
-      await this.repository.remove(id);
-      this.runtimes.delete(id);
-    });
+    // Deletion disables the session while retaining its metadata and authentication.
+    await this.stop(id);
   }
 
   async preparePairing(
@@ -517,7 +590,7 @@ export class SessionManagerService
     method: PairingMethodEnum,
     phone?: string,
   ): Promise<void> {
-    await this.queue.run(id, async () => {
+    await this.command(id, async () => {
       if (this.stopping)
         throw new ServiceUnavailableException('Application is shutting down');
       const row = await this.repository.require(id);
@@ -554,7 +627,7 @@ export class SessionManagerService
       await this.repository.update(id, {
         pairingMethod: method,
         ...(phone ? { phone } : {}),
-        enabled: true,
+        isEnabled: true,
         retryCount: 0,
       });
       runtime.pairingMethod = method;
@@ -585,7 +658,7 @@ export class SessionManagerService
         );
       await delay(50);
     }
-    return this.queue.run(id, async () => {
+    return this.command(id, async () => {
       if (
         !this.current(runtime, generation) ||
         !runtime.socket ||
@@ -643,7 +716,7 @@ export class SessionManagerService
 
   async inspectConnections(): Promise<void> {
     for (const runtime of this.runtimes.values()) {
-      await this.queue.run(runtime.sessionId, async () => {
+      await this.command(runtime.sessionId, async () => {
         if (this.stopping || runtime.intentionalStop || runtime.reconnectTimer)
           return;
         const now = Date.now();
@@ -752,6 +825,7 @@ export class SessionManagerService
       }),
     );
     await this.recovery;
+    await this.phones.drain();
     await this.queue.drain();
     await Promise.all(
       [...this.runtimes.values()].map(async (runtime) => {
@@ -766,5 +840,6 @@ export class SessionManagerService
       }),
     );
     this.runtimes.clear();
+    this.sessionPhones.clear();
   }
 }

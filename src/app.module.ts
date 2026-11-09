@@ -1,3 +1,4 @@
+import { MessagesModule } from './modules/messages/messages.module.ts';
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '@libs/prisma';
 import { AppConfigModule, RedisModule } from '@libs/common';
@@ -20,6 +21,7 @@ import { UiTestModule } from './modules/ui-test/ui-test.module.ts';
     PairingModule,
     MonitoringModule,
     UiTestModule,
+    MessagesModule,
   ],
 })
 export class AppModule {}

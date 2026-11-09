@@ -10,7 +10,7 @@ describe('SessionRuntimeService', () => {
     service.create({
       id: 'one',
       retryCount: 2,
-      enabled: true,
+      isEnabled: true,
       pairingMethod: PairingMethodEnum.QR,
     } as WaSession);
 

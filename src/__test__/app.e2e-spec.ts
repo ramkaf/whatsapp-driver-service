@@ -10,6 +10,7 @@ import type { IAppConfig } from '@libs/common';
 import { SessionRepository } from '../modules/sessions/session.repository.ts';
 import { SessionManagerService } from '../modules/connection/providers/session/session-manager.service.ts';
 import { PersistenceFilter } from '../modules/sessions/filters/persistence.filter.ts';
+import { MinioStorageService } from '../modules/media/providers/minio-storage.service.ts';
 
 const token = 'test-administration-token-with-at-least-32-characters';
 const config = {
@@ -29,6 +30,7 @@ describe('Session administration API (e2e, external services mocked)', () => {
   let app: INestApplication;
   let rows: Map<string, Record<string, unknown>>;
   let manager: {
+    replace: ReturnType<typeof vi.fn>;
     start: ReturnType<typeof vi.fn>;
     snapshot: ReturnType<typeof vi.fn>;
     preparePairing: ReturnType<typeof vi.fn>;
@@ -43,11 +45,11 @@ describe('Session administration API (e2e, external services mocked)', () => {
   beforeEach(async () => {
     rows = new Map();
     const repository = {
-      count: vi.fn(async () => rows.size),
+      countEnabledSessions: vi.fn(async () => rows.size),
       create: vi.fn(async (data: object) => {
         const row = {
           id: 'session-one',
-          enabled: true,
+          isEnabled: true,
           status: 'CONNECTING',
           ...data,
         };
@@ -62,6 +64,7 @@ describe('Session administration API (e2e, external services mocked)', () => {
       list: vi.fn(async () => [...rows.values()]),
     };
     manager = {
+      replace: vi.fn(async (data: object) => repository.create(data)),
       start: vi.fn().mockResolvedValue(undefined),
       snapshot: vi
         .fn()
@@ -79,7 +82,8 @@ describe('Session administration API (e2e, external services mocked)', () => {
       stop: vi.fn().mockResolvedValue(undefined),
       logout: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn(async (id: string) => {
-        rows.delete(id);
+        const row = await repository.require(id);
+        Object.assign(row, { isEnabled: false, status: 'DISCONNECTED' });
       }),
       inspectConnections: vi.fn().mockResolvedValue(undefined),
     };
@@ -94,6 +98,8 @@ describe('Session administration API (e2e, external services mocked)', () => {
       .useValue(repository)
       .overrideProvider(SessionManagerService)
       .useValue(manager)
+      .overrideProvider(MinioStorageService)
+      .useValue({})
       .compile();
     app = module.createNestApplication();
     app.useGlobalFilters(new PersistenceFilter());
@@ -119,6 +125,8 @@ describe('Session administration API (e2e, external services mocked)', () => {
       .post('/sessions/one/pairing-code')
       .send({})
       .expect(401);
+    await request(app.getHttpServer()).delete('/sessions/one').expect(401);
+    expect(manager.remove).not.toHaveBeenCalled();
   });
   it('validates DTOs and normalizes phones', async () => {
     await request(app.getHttpServer())
@@ -177,31 +185,51 @@ describe('Session administration API (e2e, external services mocked)', () => {
     expect(manager.preparePairing).not.toHaveBeenCalled();
   });
 
-  it('requires valid phone numbers for CODE while QR may omit a phone', async () => {
-    for (const phone of [
-      undefined,
-      null,
-      '',
-      '123',
-      'call +989121234567',
-      989121234567,
-    ]) {
-      await request(app.getHttpServer())
+  it.each(['QR', 'CODE'])(
+    'requires a valid phone before creating a %s session',
+    async (pairingMethod) => {
+      for (const phone of [
+        undefined,
+        null,
+        '',
+        '   ',
+        '123',
+        'call +989121234567',
+        989121234567,
+      ]) {
+        await request(app.getHttpServer())
+          .post('/sessions')
+          .auth(token, { type: 'bearer' })
+          .send({ name: 'test', pairingMethod, phone })
+          .expect(400);
+      }
+      expect(rows.size).toBe(0);
+      expect(manager.replace).not.toHaveBeenCalled();
+      const response = await request(app.getHttpServer())
         .post('/sessions')
         .auth(token, { type: 'bearer' })
-        .send({ name: 'test', pairingMethod: 'CODE', phone })
-        .expect(400);
-    }
-    await request(app.getHttpServer())
-      .post('/sessions')
-      .auth(token, { type: 'bearer' })
-      .send({ name: 'QR test', pairingMethod: 'QR' })
-      .expect(201);
+        .send({ name: 'test', pairingMethod, phone: '+98 912 123 4567' })
+        .expect(201);
+      expect(response.body.phone).toBe('989121234567');
+      expect(manager.replace).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: '989121234567', pairingMethod }),
+        50,
+      );
+    },
+  );
+
+  it('reuses the stored phone for pairing codes and validates explicit phones', async () => {
+    await create('QR').expect(201);
     await request(app.getHttpServer())
       .post('/sessions/session-one/pairing-code')
       .auth(token, { type: 'bearer' })
       .send({})
-      .expect(400);
+      .expect(200);
+    expect(manager.requestPairingCode).toHaveBeenCalledWith(
+      'session-one',
+      '989121234567',
+    );
+    manager.requestPairingCode.mockClear();
     for (const phone of [null, '', '123', 'call +989121234567']) {
       await request(app.getHttpServer())
         .post('/sessions/session-one/pairing-code')
@@ -265,12 +293,41 @@ describe('Session administration API (e2e, external services mocked)', () => {
         .auth(token, { type: 'bearer' })
         .expect(200);
     }
+  });
+
+  it('soft-deletes a session through DELETE and retains disabled metadata', async () => {
+    await create().expect(201);
+    const response = await request(app.getHttpServer())
+      .delete('/sessions/session-one')
+      .auth(token, { type: 'bearer' })
+      .expect(204);
+    expect(response.text).toBe('');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(manager.remove).toHaveBeenCalledExactlyOnceWith('session-one');
+    const details = await request(app.getHttpServer())
+      .get('/sessions/session-one')
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(details.body).toMatchObject({
+      id: 'session-one',
+      isEnabled: false,
+      status: 'DISCONNECTED',
+    });
+    const list = await request(app.getHttpServer())
+      .get('/sessions')
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(list.body).toEqual([details.body]);
     await request(app.getHttpServer())
       .delete('/sessions/session-one')
       .auth(token, { type: 'bearer' })
       .expect(204);
+    expect(rows.size).toBe(1);
+  });
+
+  it('returns 404 when soft-deleting an unknown session', async () => {
     await request(app.getHttpServer())
-      .get('/sessions/session-one')
+      .delete('/sessions/missing')
       .auth(token, { type: 'bearer' })
       .expect(404);
   });

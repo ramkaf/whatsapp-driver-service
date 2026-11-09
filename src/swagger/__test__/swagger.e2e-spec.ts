@@ -51,6 +51,14 @@ describe('Swagger (e2e)', () => {
           'content.application/json.examples.qr.value.pairingMethod',
           'QR',
         );
+        expect(body).toHaveProperty(
+          'content.application/json.examples.qr.value.phone',
+          '989131234567',
+        );
+        expect(document.components!.schemas!.CreateSessionDto).toHaveProperty(
+          'required',
+          expect.arrayContaining(['name', 'pairingMethod', 'phone']),
+        );
         expect(document.components!.schemas!.SessionResponseDto).toHaveProperty(
           'properties.runtime',
         );
@@ -63,6 +71,9 @@ describe('Swagger (e2e)', () => {
         expect(
           document.paths[`${base}/sessions/{id}`]!.delete!.responses,
         ).toHaveProperty('204');
+        expect(
+          document.paths[`${base}/sessions/{id}`]!.delete!.description,
+        ).toContain('isEnabled=false');
         expect(
           document.paths[`${base}/sessions/{id}/pairing-code`]!.post!.responses,
         ).toHaveProperty('429');

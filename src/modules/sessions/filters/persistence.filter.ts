@@ -50,7 +50,7 @@ export class PersistenceFilter implements ExceptionFilter {
         statusCode: status,
         message:
           status === 409
-            ? 'A session with this phone already exists'
+            ? 'The operation conflicts with existing data'
             : status === 404
               ? 'Session not found'
               : status === 503

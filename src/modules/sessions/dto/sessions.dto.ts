@@ -28,20 +28,16 @@ export class CreateSessionDto {
   @IsEnum(PairingMethodEnum)
   pairingMethod: PairingMethodEnum;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '989121234567',
     maxLength: 30,
     description:
-      'Required for CODE, optional for QR. Valid international number with or without +.',
+      'Required for both QR and CODE. Valid international number with or without +.',
   })
-  @ValidateIf(
-    (dto: CreateSessionDto) =>
-      dto.phone !== undefined || dto.pairingMethod === PairingMethodEnum.CODE,
-  )
   @IsString()
   @MaxLength(30)
   @IsInternationalPhone()
-  phone?: string;
+  phone: string;
 }
 
 export class PairingCodeDto {

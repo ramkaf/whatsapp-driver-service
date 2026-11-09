@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 import { SessionRepository } from '../session.repository.ts';
@@ -11,7 +11,6 @@ import { normalizePhone } from '../phone.ts';
 @Injectable()
 export class SessionsService {
   private readonly creation = new SessionQueue();
-  private readonly logger = new Logger(SessionsService.name);
 
   constructor(
     private readonly sessionRepository: SessionRepository,
@@ -21,24 +20,14 @@ export class SessionsService {
 
   async create(dto: CreateSessionDto) {
     return this.creation.run('create', async () => {
-      if (
-        (await this.sessionRepository.count()) >=
-        this.config.whatsapp.maxSessions
-      )
-        throw new ConflictException('Session limit reached');
-      const row = await this.sessionRepository.create({
-        name: dto.name,
-        pairingMethod: dto.pairingMethod,
-        phone: dto.phone ? normalizePhone(dto.phone) : undefined,
-      });
-      try {
-        await this.sessionManagerService.start(row.id);
-      } catch {
-        this.logger.warn({
-          sessionId: row.id,
-          event: 'initial_connection_failed',
-        });
-      }
+      const row = await this.sessionManagerService.replace(
+        {
+          name: dto.name,
+          pairingMethod: dto.pairingMethod,
+          phone: normalizePhone(dto.phone),
+        },
+        this.config.whatsapp.maxSessions,
+      );
       return this.details(row.id);
     });
   }

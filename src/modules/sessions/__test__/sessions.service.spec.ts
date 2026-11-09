@@ -8,7 +8,6 @@ import { PairingMethodEnum } from '../interfaces/session.interface.ts';
 function fixture(max = 50) {
   const rows: Record<string, unknown>[] = [];
   const repository = {
-    count: vi.fn(async () => rows.length),
     create: vi.fn(async (data: object) => {
       const row = { id: `session-${rows.length}`, ...data };
       rows.push(row);
@@ -17,7 +16,7 @@ function fixture(max = 50) {
     require: vi.fn(async () => rows.at(-1)),
   };
   const manager = {
-    start: vi.fn().mockResolvedValue(undefined),
+    replace: vi.fn(async (data: object) => repository.create(data)),
     snapshot: vi.fn().mockReturnValue({ status: 'CONNECTING' }),
   };
   return {
@@ -39,24 +38,46 @@ describe('SessionsService', () => {
       phone: '+98 912 123 4567',
       pairingMethod: PairingMethodEnum.CODE,
     });
-    expect(repository.create).toHaveBeenCalledWith({
-      name: 'WhatsApp 01',
-      phone: '989121234567',
-      pairingMethod: 'CODE',
-    });
-    expect(manager.start).toHaveBeenCalledWith(result.id);
+    expect(manager.replace).toHaveBeenCalledWith(
+      {
+        name: 'WhatsApp 01',
+        phone: '989121234567',
+        pairingMethod: 'CODE',
+      },
+      50,
+    );
+    expect(repository.require).toHaveBeenCalledWith(result.id);
     expect(result.runtime.status).toBe('CONNECTING');
   });
-  it('enforces the process session limit under concurrent creates', async () => {
-    const { service, repository } = fixture(1);
+  it('serializes concurrent creation commands', async () => {
+    const { service, repository, manager } = fixture(1);
+    let active = 0;
+    let peak = 0;
+    manager.replace.mockImplementation(async (data: object) => {
+      active++;
+      peak = Math.max(peak, active);
+      await Promise.resolve();
+      const result = await repository.create(data);
+      active--;
+      return result;
+    });
     const results = await Promise.allSettled([
-      service.create({ name: 'one', pairingMethod: PairingMethodEnum.QR }),
-      service.create({ name: 'two', pairingMethod: PairingMethodEnum.QR }),
+      service.create({
+        name: 'one',
+        phone: '989121234567',
+        pairingMethod: PairingMethodEnum.QR,
+      }),
+      service.create({
+        name: 'two',
+        phone: '989131234567',
+        pairingMethod: PairingMethodEnum.QR,
+      }),
     ]);
     expect(results.map((result) => result.status)).toEqual([
       'fulfilled',
-      'rejected',
+      'fulfilled',
     ]);
-    expect(repository.create).toHaveBeenCalledOnce();
+    expect(repository.create).toHaveBeenCalledTimes(2);
+    expect(peak).toBe(1);
   });
 });

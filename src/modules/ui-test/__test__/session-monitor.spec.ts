@@ -15,6 +15,7 @@ interface SessionRow {
   phone: string;
   status: string;
   pairingMethod: PairingMethodEnum;
+  isEnabled?: boolean;
   lastDisconnectCode?: number;
   runtime: RuntimeStatus;
 }
@@ -50,6 +51,7 @@ interface Entry {
   lastMessageAt: number;
   preview: string;
   busy: boolean;
+  deleting: boolean;
   qrImage: string;
   code: string;
   expiresAt: number;
@@ -66,7 +68,14 @@ interface Monitor {
   stop(): void;
   sync(rows: SessionRow[]): void;
   refresh(): Promise<void>;
-  pair(entry: Entry, mode: string, phone?: string): Promise<void>;
+  remove(entry: Entry): Promise<void>;
+  reconnect(entry: Entry): Promise<void>;
+  pair(
+    entry: Entry,
+    mode: string,
+    phone?: string,
+    initialRequest?: boolean,
+  ): Promise<void>;
   setStatus(entry: Entry, state: RuntimeStatus): void;
 }
 
@@ -84,7 +93,12 @@ interface StreamFrame {
 
 interface MonitorConstructor {
   new (options: {
-    request: (path: string, body: unknown, token: string) => Promise<unknown>;
+    request: (
+      path: string,
+      body: unknown,
+      token: string,
+      method?: string,
+    ) => Promise<unknown>;
     createSocket: () => FakeSocket;
     onChange: () => void;
     onFrame?: (frame: StreamFrame) => void;
@@ -139,6 +153,7 @@ function harness(rows: SessionRow[]) {
       path: string,
       _body?: unknown,
       _token?: string,
+      _method?: string,
     ): Promise<unknown> => {
       if (path === '/sessions') return rows;
       return { image: null, expiresAt: null };
@@ -179,6 +194,219 @@ afterEach(() => {
 });
 
 describe('all-account session monitor', () => {
+  it('sends DELETE and accepts an empty 204 API response', async () => {
+    const source = html.match(
+      /async function api\([\s\S]*?(?=\n      const numberFormat)/,
+    )?.[0];
+    expect(source).toBeTruthy();
+    const response = {
+      status: 204,
+      ok: true,
+      json: vi.fn(() => {
+        throw new Error('A 204 response has no JSON body');
+      }),
+    };
+    const fetch = vi.fn().mockResolvedValue(response);
+    const api = runInNewContext(source + '\napi;', {
+      $: () => ({ value: token }),
+      base: '/api',
+      AbortController,
+      setTimeout,
+      clearTimeout,
+      fetch,
+    }) as (
+      path: string,
+      body: unknown,
+      token: string,
+      method?: string,
+    ) => Promise<unknown>;
+
+    await expect(
+      api('/sessions/one', undefined, token, 'DELETE'),
+    ).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/one',
+      expect.objectContaining({ method: 'DELETE', body: undefined }),
+    );
+    expect(response.json).not.toHaveBeenCalled();
+  });
+
+  it('soft-deletes an account using DELETE and stops its stream without removing the card', async () => {
+    const rows = [row('one'), row('two')];
+    const { monitor, sockets, request } = harness(rows);
+    const entry = monitor.entries.get('one')!;
+    entry.code = 'SECRET12';
+    entry.qrImage = qrImage;
+    request.mockResolvedValueOnce(undefined);
+
+    await monitor.remove(entry);
+
+    expect(request).toHaveBeenCalledExactlyOnceWith(
+      '/sessions/one',
+      undefined,
+      token,
+      'DELETE',
+    );
+    expect(monitor.entries.get('one')).toBe(entry);
+    expect(entry).toMatchObject({
+      row: { isEnabled: false, status: 'DISCONNECTED' },
+      status: { connected: false, reason: 'MANUAL_DISCONNECT' },
+      transport: 'disabled',
+      code: '',
+      qrImage: '',
+      deleting: false,
+    });
+    expect(sockets[0].close).toHaveBeenCalledOnce();
+    expect(sockets[0].onmessage).toBeNull();
+    expect(sockets[1].close).not.toHaveBeenCalled();
+    await monitor.remove(entry);
+    expect(request).toHaveBeenCalledTimes(1);
+    monitor.sync([
+      {
+        ...rows[0],
+        isEnabled: false,
+        status: 'DISCONNECTED',
+        runtime: disconnected,
+      },
+      rows[1],
+    ]);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(sockets).toHaveLength(2);
+  });
+
+  it('does not restore an enabled row from a list request that began before deletion', async () => {
+    const rows = [row('one')];
+    const { monitor, sockets, request } = harness(rows);
+    const pendingList = deferred<SessionRow[]>();
+    request.mockImplementation(async (path) => {
+      if (path === '/sessions') return pendingList.promise;
+      return undefined;
+    });
+    const refresh = monitor.refresh();
+    const entry = monitor.entries.get('one')!;
+
+    await monitor.remove(entry);
+    pendingList.resolve(rows);
+    await refresh;
+
+    expect(entry.row.isEnabled).toBe(false);
+    expect(entry.transport).toBe('disabled');
+    expect(sockets).toHaveLength(1);
+  });
+
+  it('ignores a reconnect response that arrives after deletion succeeds', async () => {
+    const { monitor, sockets, request } = harness([row('one')]);
+    const pendingReconnect = deferred<SessionRow>();
+    request.mockImplementation(async (path) =>
+      path.endsWith('/reconnect') ? pendingReconnect.promise : undefined,
+    );
+    const entry = monitor.entries.get('one')!;
+    const reconnect = monitor.reconnect(entry);
+    await monitor.remove(entry);
+    pendingReconnect.resolve(row('one', { isEnabled: true }));
+    await reconnect;
+
+    expect(entry.row.isEnabled).toBe(false);
+    expect(entry.status.connected).toBe(false);
+    expect(entry.transport).toBe('disabled');
+    expect(sockets).toHaveLength(1);
+    expect(entry.error).toBe('');
+  });
+
+  it('discards a pairing response that arrives after deletion succeeds', async () => {
+    const { monitor, request } = harness([
+      row('one', {
+        status: 'EXPIRED',
+        runtime: disconnected,
+        pairingMethod: PairingMethodEnum.CODE,
+      }),
+    ]);
+    const pendingCode = deferred<PairingResponse>();
+    request.mockImplementation(async (path) =>
+      path.endsWith('/pairing-code') ? pendingCode.promise : undefined,
+    );
+    const entry = monitor.entries.get('one')!;
+    const pair = monitor.pair(entry, 'CODE');
+    await monitor.remove(entry);
+    pendingCode.resolve({
+      status: 'AWAITING_PAIRING',
+      code: 'STALE123',
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    await pair;
+
+    expect(entry.row.isEnabled).toBe(false);
+    expect(entry.code).toBe('');
+    expect(entry.transport).toBe('disabled');
+  });
+
+  it('retains the active stream and reports a failed deletion', async () => {
+    const { monitor, sockets, request } = harness([row('one')]);
+    request.mockRejectedValueOnce(new Error('Server unavailable'));
+    const entry = monitor.entries.get('one')!;
+
+    await monitor.remove(entry);
+
+    expect(entry.error).toBe('Server unavailable');
+    expect(entry.deleting).toBe(false);
+    expect(entry.row.isEnabled).not.toBe(false);
+    expect(sockets[0].close).not.toHaveBeenCalled();
+  });
+
+  it('keeps disabled accounts quiet and starts their stream after explicit reconnect', async () => {
+    const disabled = row('one', {
+      isEnabled: false,
+      status: 'DISCONNECTED',
+      runtime: disconnected,
+    });
+    const { monitor, sockets, request } = harness([disabled]);
+    const entry = monitor.entries.get('one')!;
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(sockets).toHaveLength(0);
+    expect(request).not.toHaveBeenCalled();
+    expect(entry.transport).toBe('disabled');
+    request.mockResolvedValueOnce(row('one', { isEnabled: true }));
+
+    await monitor.reconnect(entry);
+
+    expect(request).toHaveBeenCalledWith('/sessions/one/reconnect', {}, token);
+    expect(entry.row.isEnabled).toBe(true);
+    expect(sockets).toHaveLength(1);
+  });
+
+  it('allows explicit pairing for disabled logged-out accounts without automatic QR polling', async () => {
+    const { monitor, sockets, request } = harness([
+      row('one', {
+        isEnabled: false,
+        status: 'LOGGED_OUT',
+        runtime: {
+          ...disconnected,
+          status: 'LOGGED_OUT',
+          requiresPairing: true,
+        },
+      }),
+    ]);
+    const entry = monitor.entries.get('one')!;
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(sockets).toHaveLength(0);
+    expect(request).not.toHaveBeenCalled();
+    request.mockImplementation(async (path) =>
+      path.endsWith('/qr-image')
+        ? {
+            image: qrImage,
+            expiresAt: new Date(Date.now() + 60000).toISOString(),
+          }
+        : {},
+    );
+
+    await monitor.pair(entry, 'QR');
+
+    expect(request).toHaveBeenCalledWith('/sessions/one/qr', {}, token);
+    expect(entry.row.isEnabled).toBe(true);
+    expect(entry.qrImage).toBe(qrImage);
+    expect(sockets).toHaveLength(1);
+  });
+
   it('shares each valid frame after updating its account without opening another stream', () => {
     const { monitor, sockets, onFrame } = harness([row('one'), row('two')]);
     sockets[0].open('one');
@@ -419,6 +647,37 @@ describe('all-account session monitor', () => {
       ).toBe(expected);
     },
   );
+
+  it('requests the initial CODE while a newly created session waits for socket readiness', async () => {
+    const { monitor, request } = harness([
+      row('new', {
+        status: 'CONNECTING',
+        pairingMethod: PairingMethodEnum.CODE,
+        runtime: { status: 'CONNECTING', connected: false },
+      }),
+    ]);
+    const entry = monitor.entries.get('new')!;
+    const pending = deferred<PairingResponse>();
+    request.mockImplementation(async () => pending.promise);
+    await monitor.pair(entry, 'CODE');
+    expect(request).not.toHaveBeenCalled();
+    const work = monitor.pair(entry, 'CODE', entry.row.phone, true);
+    expect(entry.busy).toBe(true);
+    expect(request).toHaveBeenCalledWith(
+      '/sessions/new/pairing-code',
+      { phone: entry.row.phone },
+      token,
+    );
+    pending.resolve({
+      status: 'AWAITING_PAIRING',
+      code: 'ABCD1234',
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    await work;
+    expect(entry.code).toBe('ABCD1234');
+    expect(entry.status.status).toBe('AWAITING_PAIRING');
+    expect(entry.busy).toBe(false);
+  });
 
   it('requests QR and CODE independently, then removes expired pairing secrets', async () => {
     const pendingCode = deferred<PairingResponse>();

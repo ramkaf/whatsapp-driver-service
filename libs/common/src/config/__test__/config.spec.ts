@@ -27,12 +27,61 @@ describe('application configuration', () => {
       'REDIS_CONNECTION_ATTEMPTS',
       'REDIS_RETRY_DELAY_MS',
       'REDIS_MAX_RETRY_DELAY_MS',
+      'MINIO_ENDPOINT',
+      'MINIO_PORT',
+      'MINIO_USE_SSL',
+      'MINIO_ACCESS_KEY',
+      'MINIO_SECRET_KEY',
+      'MINIO_BUCKET',
     ]) {
       vi.stubEnv(key, undefined);
     }
   });
 
   afterEach(() => vi.unstubAllEnvs());
+
+  it('provides MinIO defaults and resolves environment settings', () => {
+    expect(configuer().minio).toEqual({
+      endpoint: '127.0.0.1',
+      port: 9000,
+      useSsl: false,
+      accessKey: '',
+      secretKey: '',
+      bucket: 'whatsapp-media',
+    });
+    vi.stubEnv('MINIO_ENDPOINT', 'minio');
+    vi.stubEnv('MINIO_PORT', '9443');
+    vi.stubEnv('MINIO_USE_SSL', 'true');
+    vi.stubEnv('MINIO_ACCESS_KEY', 'test-access');
+    vi.stubEnv('MINIO_SECRET_KEY', 'test-secret');
+    vi.stubEnv('MINIO_BUCKET', 'attachments');
+    expect(configuer().minio).toEqual({
+      endpoint: 'minio',
+      port: 9443,
+      useSsl: true,
+      accessKey: 'test-access',
+      secretKey: 'test-secret',
+      bucket: 'attachments',
+    });
+    vi.stubEnv('MINIO_USE_SSL', 'false');
+    expect(configuer().minio.useSsl).toBe(false);
+  });
+
+  it.each([
+    ['MINIO_PORT', '0'],
+    ['MINIO_PORT', '65536'],
+    ['MINIO_PORT', '9000abc'],
+    ['MINIO_PORT', '1.5'],
+    ['MINIO_PORT', ''],
+    ['MINIO_USE_SSL', 'yes'],
+    ['MINIO_USE_SSL', '1'],
+    ['MINIO_ENDPOINT', ''],
+    ['MINIO_BUCKET', ''],
+    ['MINIO_ACCESS_KEY', ''],
+    ['MINIO_SECRET_KEY', ''],
+  ])('rejects invalid MinIO configuration %s', (key, value) => {
+    expect(() => validateEnvironment({ [key]: value })).toThrow(key);
+  });
 
   it('provides Redis defaults and resolves numeric environment settings', () => {
     expect(configuer().redis).toEqual({
@@ -83,7 +132,6 @@ describe('application configuration', () => {
 
   it.each([
     ['WA_MAX_SESSIONS', '51'],
-    ['WA_MAX_RETRIES', '0'],
     ['WA_STARTUP_CONCURRENCY', '6'],
     ['WA_WATCHDOG_INTERVAL_MS', '0'],
     ['WA_PAIRING_TTL_MS', '60001'],

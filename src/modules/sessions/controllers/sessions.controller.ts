@@ -67,7 +67,7 @@ const ApiSessionId = () =>
 })
 @ApiConflictResponse({
   description:
-    'Duplicate phone, session limit reached, or operation conflicts with the current state.',
+    'Session limit reached, or operation conflicts with the current state.',
   type: ApiErrorResponseDto,
 })
 @ApiServiceUnavailableResponse({
@@ -96,7 +96,7 @@ export class SessionsController {
   @ApiOperation({
     summary: 'Create a session and start connecting',
     description:
-      'Choose CODE or QR. A phone is required for CODE. Retrieve pairing data from its dedicated endpoint; the create response does not mean the account is connected.',
+      'Choose CODE or QR. A phone is required for both methods. Reusing a phone retires its old session and credentials remain isolated by ID. Retrieve pairing data from its dedicated endpoint; the create response does not mean the account is connected.',
   })
   @ApiBody({
     type: CreateSessionDto,
@@ -111,7 +111,11 @@ export class SessionsController {
       },
       qr: {
         summary: 'Pair by scanning a QR',
-        value: { name: 'WhatsApp 02', pairingMethod: PairingMethodEnum.QR },
+        value: {
+          name: 'WhatsApp 02',
+          phone: '989131234567',
+          pairingMethod: PairingMethodEnum.QR,
+        },
       },
     },
   })
@@ -121,7 +125,7 @@ export class SessionsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List sessions with current runtime state' })
+  @ApiOperation({ summary: 'List current session versions with runtime state' })
   @ApiOkResponse({ type: SessionResponseDto, isArray: true })
   list() {
     return this.sessionsService.list();
@@ -238,11 +242,11 @@ export class SessionsController {
   @HttpCode(204)
   @ApiSessionId()
   @ApiOperation({
-    summary: 'Delete the local session and authentication',
+    summary: 'Soft-delete a session and disconnect its socket',
     description:
-      'Stops the socket and deletes local credentials, keys and events. Does not remotely unlink the WhatsApp device; log out first if remote unlinking is desired.',
+      'Sets isEnabled=false, cancels retries and stops the socket. Retains session metadata, credentials, keys and events. The disabled session remains visible and will not reconnect after application restart. Resume explicitly with reconnect; remote logout is a separate operation.',
   })
-  @ApiNoContentResponse({ description: 'Local session deleted.' })
+  @ApiNoContentResponse({ description: 'Session disabled and socket stopped.' })
   remove(@Param('id') id: string) {
     return this.sessionsService.remove(id);
   }

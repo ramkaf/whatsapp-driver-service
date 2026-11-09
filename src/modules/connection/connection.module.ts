@@ -1,3 +1,4 @@
+import { ConnectionMessageSource } from './interfaces/message-event-source.ts';
 import { SessionRuntimeService } from './providers/session/session-runtime.service.ts';
 import { SocketLifecycleService } from './providers/socket/socket-lifecycle.service.ts';
 import { SocketEventRegistrarService } from './providers/socket/socket-event-registrar.service.ts';
@@ -16,11 +17,15 @@ import { ConnectionSupervisorService } from './providers/recovery/connection-sup
     SessionRuntimeService,
     SocketLifecycleService,
     SocketEventRegistrarService,
+    {
+      provide: ConnectionMessageSource,
+      useExisting: SocketEventRegistrarService,
+    },
     RealtimeService,
     SessionManagerService,
     SocketFactoryService,
     ConnectionSupervisorService,
   ],
-  exports: [SessionManagerService, RealtimeService],
+  exports: [SessionManagerService, RealtimeService, ConnectionMessageSource],
 })
 export class ConnectionModule {}

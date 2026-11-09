@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsBoolean,
   MinLength,
   IsInt,
   IsOptional,
@@ -21,12 +22,6 @@ export class EnvironmentVariablesValidator {
   @Max(50)
   @IsOptional()
   WA_MAX_SESSIONS?: number;
-
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  @IsOptional()
-  WA_MAX_RETRIES?: number;
 
   @IsInt()
   @Min(1)
@@ -119,6 +114,36 @@ export class EnvironmentVariablesValidator {
   @Max(2_147_483_647)
   @IsOptional()
   REDIS_MAX_RETRY_DELAY_MS?: number;
+
+  @IsString()
+  @MinLength(1)
+  @IsOptional()
+  MINIO_ENDPOINT: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  @IsOptional()
+  MINIO_PORT: number;
+
+  @IsBoolean()
+  @IsOptional()
+  MINIO_USE_SSL: boolean;
+
+  @IsString()
+  @MinLength(1)
+  @IsOptional()
+  MINIO_ACCESS_KEY: string;
+
+  @IsString()
+  @MinLength(1)
+  @IsOptional()
+  MINIO_SECRET_KEY: string;
+
+  @IsString()
+  @MinLength(1)
+  @IsOptional()
+  MINIO_BUCKET: string;
 
   @IsUrl({ protocols: ['mysql'], require_protocol: true, require_tld: false })
   @IsOptional()
