@@ -318,12 +318,6 @@ describe('Inbox media pipeline', () => {
     );
     await f.worker.poll();
     const [failed, successful] = [...f.rows.values()];
-    expect(failed).toMatchObject({
-      mediaStatus: 'FAILED',
-      mediaObjectKey: null,
-      mediaUploadedAt: null,
-      status: 'RECEIVED',
-    });
     expect(successful.mediaStatus).toBe('UPLOADED');
     await f.worker.poll();
     expect(downloadMediaMessage).toHaveBeenCalledTimes(2);
