@@ -1,5 +1,4 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ReceivedMessageEvent } from '../../messages/receive/interfaces/message-event-output.ts';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { WAMessage } from '@whiskeysockets/baileys';
 import { PrismaService } from '@libs/common/prisma/index.js';
 import { Prisma } from '@libs/common/prisma/src/index.js';

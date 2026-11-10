@@ -1,5 +1,3 @@
-import type { WAMessage } from '@whiskeysockets/baileys';
-import type { Readable } from 'node:stream';
 import type { WASocket } from '@whiskeysockets/baileys';
 
 export interface MediaDescriptor {
