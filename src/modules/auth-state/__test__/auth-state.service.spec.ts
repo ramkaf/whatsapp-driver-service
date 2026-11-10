@@ -98,6 +98,40 @@ describe('AuthStateService', () => {
     service = new AuthStateService(db as unknown as PrismaService);
   });
 
+  it('checks the persisted identity without creating credentials or mixing sessions', async () => {
+    await expect(service.hasIdentity('missing')).resolves.toBe(false);
+    expect(db.waAuthCreds.upsert).not.toHaveBeenCalled();
+    const one = await service.open('one', vi.fn());
+    await expect(service.hasIdentity('one')).resolves.toBe(false);
+    one.state.creds.me = {
+      id: '989121234567:1@s.whatsapp.net',
+      name: 'Account',
+    };
+    await one.saveCreds();
+    await expect(service.hasIdentity('one')).resolves.toBe(true);
+    await expect(service.hasIdentity('two')).resolves.toBe(false);
+    await one.close();
+  });
+
+  it('clears credentials and keys together only for the requested session', async () => {
+    const one = await service.open('one', vi.fn());
+    const two = await service.open('two', vi.fn());
+    await one.state.keys.set({ session: { key: Buffer.from([1]) } });
+    await two.state.keys.set({ session: { key: Buffer.from([2]) } });
+    await one.close();
+    db.$transaction.mockClear();
+    await service.clear('one');
+    expect(db.credentials.has('one')).toBe(false);
+    expect(db.keys.has('one:session:key')).toBe(false);
+    expect(db.credentials.has('two')).toBe(true);
+    expect(db.keys.has('two:session:key')).toBe(true);
+    expect(db.$transaction).toHaveBeenCalledExactlyOnceWith([
+      expect.any(Promise),
+      expect.any(Promise),
+    ]);
+    await two.close();
+  });
+
   it('creates durable initial credentials and restores binary data per session', async () => {
     const first = await service.open('one', vi.fn());
     const second = await service.open('two', vi.fn());

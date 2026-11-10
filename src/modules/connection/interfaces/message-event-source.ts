@@ -1,6 +1,6 @@
 import type { BaileysEventMap, WASocket } from '@whiskeysockets/baileys';
 
-// Only message events cross this boundary; sockets and authentication stay in ConnectionModule.
+// Application events cross this boundary; sockets and authentication stay in ConnectionModule.
 export const MESSAGE_EVENTS = [
   'messages.upsert',
   'messages.update',
@@ -10,6 +10,20 @@ export const MESSAGE_EVENTS = [
   'message-receipt.update',
   'messaging-history.set',
   'messaging-history.status',
+  'chats.upsert',
+  'chats.update',
+  'chats.delete',
+  'contacts.upsert',
+  'contacts.update',
+  'lid-mapping.update',
+  'groups.upsert',
+  'groups.update',
+  'group-participants.update',
+  'group.join-request',
+  'presence.update',
+  'call',
+  'blocklist.set',
+  'blocklist.update',
 ] as const satisfies readonly (keyof BaileysEventMap)[];
 
 export type MessageEventName = (typeof MESSAGE_EVENTS)[number];

@@ -5,10 +5,7 @@ import { MinioStorageService } from './providers/minio-storage.service.ts';
 
 @Module({
   controllers: [MediaController],
-  providers: [
-    MediaService,
-    MinioStorageService,
-  ],
-  exports: [MediaService, MinioStorageService],
+  providers: [MediaService, MinioStorageService],
+  exports: [MediaService],
 })
 export class MediaModule {}

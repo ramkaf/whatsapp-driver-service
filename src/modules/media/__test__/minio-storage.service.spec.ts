@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Readable } from 'node:stream';
 import type { IAppConfig } from '@libs/common';
 import { MinioStorageService } from '../providers/minio-storage.service.ts';
@@ -9,7 +10,6 @@ const {
   putObject,
   createClient,
   presignedGetObject,
-  listObjectsV2,
 } = vi.hoisted(() => ({
   statObject: vi.fn(),
   bucketExists: vi.fn(),
@@ -17,7 +17,6 @@ const {
   putObject: vi.fn(),
   createClient: vi.fn(),
   presignedGetObject: vi.fn(),
-  listObjectsV2: vi.fn(),
 }));
 vi.mock('minio', () => ({
   Client: class {
@@ -29,7 +28,6 @@ vi.mock('minio', () => ({
     makeBucket = makeBucket;
     putObject = putObject;
     presignedGetObject = presignedGetObject;
-    listObjectsV2 = listObjectsV2;
   },
 }));
 
@@ -43,18 +41,23 @@ const config = {
     bucket: 'test-bucket',
   },
 } as IAppConfig;
+const hash = 'a'.repeat(64);
+const key = 'media/sha256/aa/' + hash;
 
 describe('MinioStorageService', () => {
   let storage: MinioStorageService;
-
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
     storage = new MinioStorageService(config);
   });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
-  afterEach(() => vi.useRealTimers());
-
-  it('uses resolved application configuration to create the client', () => {
+  it('uses the application configuration to construct the SDK client', () => {
     expect(createClient).toHaveBeenCalledExactlyOnceWith({
       endPoint: 'storage.internal',
       port: 9443,
@@ -81,20 +84,24 @@ describe('MinioStorageService', () => {
     expect(makeBucket).not.toHaveBeenCalled();
   });
 
-  it('propagates bucket initialization failures', async () => {
-    const error = new Error('Storage unavailable');
-    bucketExists.mockRejectedValue(error);
-    await expect(storage.onModuleInit()).rejects.toBe(error);
-    expect(makeBucket).not.toHaveBeenCalled();
-  });
+  it.each(['lookup', 'creation'] as const)(
+    'propagates a bucket %s failure',
+    async (operation) => {
+      const failure = new Error('Storage unavailable');
+      if (operation === 'lookup') bucketExists.mockRejectedValue(failure);
+      else {
+        bucketExists.mockResolvedValue(false);
+        makeBucket.mockRejectedValue(failure);
+      }
+      await expect(storage.onModuleInit()).rejects.toBe(failure);
+    },
+  );
 
-  it('streams uploads with the media content type and returns object metadata', async () => {
+  it('uploads bytes with their known size, MIME type and SHA-256 metadata and signs the resulting object', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-11-09T10:00:00.789Z'));
+    vi.setSystemTime(new Date('2026-11-10T10:00:00.789Z'));
     const stream = Readable.from(['media-bytes']);
-    const url =
-      'https://storage.internal:9443/test-bucket/media/image.jpg?X-Amz-Signature=test-signature';
-    presignedGetObject.mockResolvedValue(url);
+    const url = 'https://storage.internal/object?signature=test';
     putObject.mockImplementation(
       async (_bucket: string, _key: string, body: Readable) => {
         const chunks: Buffer[] = [];
@@ -103,54 +110,59 @@ describe('MinioStorageService', () => {
         return { etag: 'stored-etag' };
       },
     );
+    presignedGetObject.mockResolvedValue(url);
     await expect(
-      storage.uploadStream('media/image.jpg', stream, 'image/jpeg'),
+      storage.uploadStream(key, stream, 11, 'image/jpeg', hash),
     ).resolves.toEqual({
       bucket: 'test-bucket',
-      objectKey: 'media/image.jpg',
+      objectKey: key,
       etag: 'stored-etag',
       url,
-      urlExpiresAt: '2026-11-16T10:00:00.000Z',
+      urlExpiresAt: '2026-11-17T10:00:00.000Z',
     });
     expect(putObject).toHaveBeenCalledExactlyOnceWith(
       'test-bucket',
-      'media/image.jpg',
+      key,
       stream,
-      undefined,
-      { 'Content-Type': 'image/jpeg' },
+      11,
+      { 'Content-Type': 'image/jpeg', 'x-amz-meta-sha256': hash },
     );
     expect(presignedGetObject).toHaveBeenCalledExactlyOnceWith(
       'test-bucket',
-      'media/image.jpg',
+      key,
       604800,
       {},
-      new Date('2026-11-09T10:00:00.000Z'),
+      new Date('2026-11-10T10:00:00.000Z'),
     );
   });
 
-  it('propagates upload failures', async () => {
-    const error = new Error('Access denied');
-    const stream = Readable.from(['media-bytes']);
-    putObject.mockRejectedValue(error);
-    await expect(
-      storage.uploadStream('media/image.jpg', stream, 'image/jpeg'),
-    ).rejects.toBe(error);
-    expect(presignedGetObject).not.toHaveBeenCalled();
-    stream.destroy();
-  });
+  it.each(['upload', 'signing'] as const)(
+    'propagates %s failures without returning a successful result',
+    async (operation) => {
+      const failure = new Error('Storage unavailable');
+      putObject.mockResolvedValue({ etag: 'etag' });
+      if (operation === 'upload') putObject.mockRejectedValue(failure);
+      else presignedGetObject.mockRejectedValue(failure);
+      const stream = Readable.from(['bytes']);
+      try {
+        await expect(
+          storage.uploadStream(key, stream, 5, 'application/pdf', hash),
+        ).rejects.toBe(failure);
+        if (operation === 'upload')
+          expect(presignedGetObject).not.toHaveBeenCalled();
+      } finally {
+        stream.destroy();
+      }
+    },
+  );
 
-  it('passes reserved path characters to the SDK and preserves the signed URL unchanged', async () => {
-    const objectKey = 'sessions/one/chat@s.whatsapp.net/report #1+فارسی.pdf';
-    const url =
-      'https://storage.internal:9443/test-bucket/signed-encoded-path?X-Amz-Signature=encoded';
-    putObject.mockResolvedValue({ etag: 'etag' });
+  it('passes reserved path characters to the SDK without rewriting its signed URL', async () => {
+    const objectKey = 'legacy/report #1+فارسی.pdf';
+    const url = 'https://storage.internal/encoded?signature=unchanged';
     presignedGetObject.mockResolvedValue(url);
-    const stream = Readable.from(['bytes']);
-    const result = await storage.uploadStream(
-      objectKey,
-      stream,
-      'application/pdf',
-    );
+    await expect(
+      storage.getStoredObject(objectKey, 'etag'),
+    ).resolves.toMatchObject({ objectKey, url });
     expect(presignedGetObject).toHaveBeenCalledWith(
       'test-bucket',
       objectKey,
@@ -158,153 +170,116 @@ describe('MinioStorageService', () => {
       {},
       expect.any(Date),
     );
-    expect(result.url).toBe(url);
-    stream.destroy();
   });
 
-  it('propagates signing failures rather than returning an unusable address', async () => {
-    const error = new Error('Could not sign the download URL');
-    putObject.mockResolvedValue({ etag: 'etag' });
-    presignedGetObject.mockRejectedValue(error);
-    const stream = Readable.from(['bytes']);
-    await expect(
-      storage.uploadStream('media/image.jpg', stream, 'image/jpeg'),
-    ).rejects.toBe(error);
-    stream.destroy();
-  });
-
-  it('refreshes the URL for an existing object without uploading it again', async () => {
+  it('refreshes download URLs for existing objects without uploading again', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-11-09T10:00:00.789Z'));
+    vi.setSystemTime(new Date('2026-11-10T10:00:00.789Z'));
     presignedGetObject
       .mockResolvedValueOnce('first-url')
       .mockResolvedValueOnce('fresh-url');
-    const first = await storage.getStoredObject(
-      'conversations/chat/file.jpg',
-      'existing-etag',
-    );
-    vi.setSystemTime(new Date('2026-11-10T10:00:00.789Z'));
-    const fresh = await storage.getStoredObject(
-      'conversations/chat/file.jpg',
-      'existing-etag',
-    );
-    expect(first.urlExpiresAt).toBe('2026-11-16T10:00:00.000Z');
-    expect(fresh).toEqual({
-      bucket: 'test-bucket',
-      objectKey: 'conversations/chat/file.jpg',
+    const first = await storage.getStoredObject(key, 'existing-etag');
+    vi.setSystemTime(new Date('2026-11-11T10:00:00.789Z'));
+    const fresh = await storage.getStoredObject(key, 'existing-etag');
+    expect(first.urlExpiresAt).toBe('2026-11-17T10:00:00.000Z');
+    expect(fresh).toMatchObject({
+      objectKey: key,
       etag: 'existing-etag',
       url: 'fresh-url',
-      urlExpiresAt: '2026-11-17T10:00:00.000Z',
+      urlExpiresAt: '2026-11-18T10:00:00.000Z',
     });
     expect(putObject).not.toHaveBeenCalled();
     expect(statObject).not.toHaveBeenCalled();
   });
 
-  it('lists object metadata recursively under the requested conversation prefix', async () => {
-    const stream = Readable.from([
-      { prefix: 'conversations/chat/subdirectory/', size: 0 },
-      { name: 'conversations/chat/first.jpg', size: 12, etag: 'first-etag' },
-      { name: 'conversations/chat/second.jpg', size: 34, etag: 'second-etag' },
-    ]);
-    listObjectsV2.mockReturnValue(stream);
-    const result = [];
-    for await (const object of storage.listObjects('conversations/chat/'))
-      result.push(object);
-    expect(result).toEqual([
-      {
-        objectKey: 'conversations/chat/first.jpg',
-        size: 12,
-        etag: 'first-etag',
-      },
-      {
-        objectKey: 'conversations/chat/second.jpg',
-        size: 34,
-        etag: 'second-etag',
-      },
-    ]);
-    expect(listObjectsV2).toHaveBeenCalledExactlyOnceWith(
-      'test-bucket',
-      'conversations/chat/',
-      true,
-    );
-    expect(stream.destroyed).toBe(true);
-  });
-
-  it('closes the listing stream when the caller finds a match early', async () => {
-    const stream = Readable.from([
-      { name: 'conversations/chat/first.jpg', size: 12, etag: 'first-etag' },
-      { name: 'conversations/chat/second.jpg', size: 34, etag: 'second-etag' },
-    ]);
-    listObjectsV2.mockReturnValue(stream);
-    for await (const object of storage.listObjects('conversations/chat/')) {
-      expect(object.objectKey).toBe('conversations/chat/first.jpg');
-      break;
-    }
-    expect(stream.destroyed).toBe(true);
-  });
-
-  it('propagates listing failures and releases the failed stream', async () => {
-    const error = Object.assign(new Error('Storage unavailable'), {
-      code: 'AccessDenied',
-    });
-    const stream = new Readable({
-      objectMode: true,
-      read() {
-        this.destroy(error);
-      },
-    });
-    listObjectsV2.mockReturnValue(stream);
-    const collect = async () => {
-      const result = [];
-      for await (const object of storage.listObjects('conversations/chat/'))
-        result.push(object);
-      return result;
-    };
-    await expect(collect()).rejects.toBe(error);
-    expect(stream.destroyed).toBe(true);
-  });
-
-  it.each([0, 1234])(
-    'reads current metadata including size %s',
-    async (size) => {
-      statObject.mockResolvedValue({ size, etag: 'current-etag' });
-      await expect(
-        storage.getObjectInfo('conversations/chat/file.jpg'),
-      ).resolves.toEqual({
-        objectKey: 'conversations/chat/file.jpg',
-        size,
+  it.each(['x-amz-meta-sha256', 'X-Amz-Meta-Sha256'])(
+    'reads size, etag and checksum metadata from %s',
+    async (header) => {
+      statObject.mockResolvedValue({
+        size: 1234,
         etag: 'current-etag',
+        metaData: { [header]: hash },
       });
-      expect(statObject).toHaveBeenCalledExactlyOnceWith(
-        'test-bucket',
-        'conversations/chat/file.jpg',
-      );
+      await expect(storage.getObjectInfo(key)).resolves.toEqual({
+        objectKey: key,
+        size: 1234,
+        etag: 'current-etag',
+        sha256: hash,
+      });
+      expect(statObject).toHaveBeenCalledExactlyOnceWith('test-bucket', key);
     },
   );
 
-  it('returns true for an existing object', async () => {
-    statObject.mockResolvedValue({ etag: 'existing-etag' });
-    await expect(storage.objectExists('media/image.jpg')).resolves.toBe(true);
-    expect(statObject).toHaveBeenCalledWith('test-bucket', 'media/image.jpg');
+  it('reuses an object only when both its actual size and SHA-256 match', async () => {
+    statObject.mockResolvedValue({
+      size: 20,
+      etag: 'current-etag',
+      metaData: { 'x-amz-meta-sha256': hash },
+    });
+    presignedGetObject.mockResolvedValue('fresh-url');
+    await expect(
+      storage.getExistingObject(key, 20, hash),
+    ).resolves.toMatchObject({
+      objectKey: key,
+      etag: 'current-etag',
+      url: 'fresh-url',
+    });
+    expect(putObject).not.toHaveBeenCalled();
   });
 
-  it.each(['NoSuchKey', 'NotFound'])('returns false for %s', async (code) => {
+  it.each([
+    { size: 21, metaData: { 'x-amz-meta-sha256': hash } },
+    { size: 20, metaData: { 'x-amz-meta-sha256': 'b'.repeat(64) } },
+    { size: 20 },
+  ])(
+    'does not reuse an object with mismatched or missing integrity metadata: %j',
+    async (info) => {
+      statObject.mockResolvedValue({ etag: 'etag', ...info });
+      await expect(
+        storage.getExistingObject(key, 20, hash),
+      ).resolves.toBeNull();
+      expect(presignedGetObject).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns null for a nonexistent content key', async () => {
     statObject.mockRejectedValue(
-      Object.assign(new Error('not found'), { code }),
+      Object.assign(new Error('missing'), { code: 'NoSuchKey' }),
     );
-    await expect(storage.objectExists('media/image.jpg')).resolves.toBe(false);
-    await expect(storage.getObjectInfo('media/image.jpg')).resolves.toBeNull();
+    await expect(storage.getExistingObject(key, 20, hash)).resolves.toBeNull();
+    expect(presignedGetObject).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { code: 'NoSuchKey' },
+    { code: 'NoSuchObject' },
+    { code: 'NotFound' },
+    { statusCode: 404 },
+  ])(
+    'recognizes missing objects without hiding other storage errors: %j',
+    async (details) => {
+      statObject.mockRejectedValue(
+        Object.assign(new Error('missing'), details),
+      );
+      await expect(storage.getObjectInfo(key)).resolves.toBeNull();
+      await expect(storage.objectExists(key)).resolves.toBe(false);
+    },
+  );
 
   it.each(['AccessDenied', 'NoSuchBucket', 'ECONNREFUSED'])(
     'propagates %s instead of treating the object as missing',
     async (code) => {
-      const error = Object.assign(new Error('storage failed'), { code });
-      statObject.mockRejectedValue(error);
-      await expect(storage.objectExists('media/image.jpg')).rejects.toBe(error);
-      await expect(storage.getObjectInfo('media/image.jpg')).rejects.toBe(
-        error,
+      const failure = Object.assign(new Error('storage failed'), { code });
+      statObject.mockRejectedValue(failure);
+      await expect(storage.getObjectInfo(key)).rejects.toBe(failure);
+      await expect(storage.getExistingObject(key, 20, hash)).rejects.toBe(
+        failure,
       );
     },
   );
+
+  it('reports an existing object even when checksum metadata is unavailable', async () => {
+    statObject.mockResolvedValue({ size: 0, etag: 'etag' });
+    await expect(storage.objectExists(key)).resolves.toBe(true);
+  });
 });

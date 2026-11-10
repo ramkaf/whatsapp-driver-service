@@ -47,3 +47,35 @@ export const WaSessionEventType = {
 } as const
 
 export type WaSessionEventType = (typeof WaSessionEventType)[keyof typeof WaSessionEventType]
+
+
+export const WhatsappMessageInboxStatus = {
+  RECEIVED: 'RECEIVED',
+  READY: 'READY',
+  PROCESSING: 'PROCESSING',
+  PROCESSED: 'PROCESSED',
+  FAILED: 'FAILED'
+} as const
+
+export type WhatsappMessageInboxStatus = (typeof WhatsappMessageInboxStatus)[keyof typeof WhatsappMessageInboxStatus]
+
+
+export const WhatsappMessageMediaStatus = {
+  NOT_REQUIRED: 'NOT_REQUIRED',
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  UPLOADED: 'UPLOADED',
+  FAILED: 'FAILED'
+} as const
+
+export type WhatsappMessageMediaStatus = (typeof WhatsappMessageMediaStatus)[keyof typeof WhatsappMessageMediaStatus]
+
+
+export const WhatsappMessageOutboxStatus = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  PUBLISHED: 'PUBLISHED',
+  FAILED: 'FAILED'
+} as const
+
+export type WhatsappMessageOutboxStatus = (typeof WhatsappMessageOutboxStatus)[keyof typeof WhatsappMessageOutboxStatus]

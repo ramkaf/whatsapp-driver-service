@@ -1,15 +1,17 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+
 import type { OnModuleInit } from '@nestjs/common';
+
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 
 import * as Minio from 'minio';
 import type { Readable } from 'node:stream';
+
 import type {
   MinioObjectInfo,
   StoredMinioObject,
 } from '../interfaces/media.interface.ts';
-import { safeId } from '../../../utils/message.utils.ts';
 
 const DOWNLOAD_URL_TTL_SECONDS = 7 * 24 * 60 * 60;
 
@@ -21,11 +23,15 @@ export class MinioStorageService implements OnModuleInit {
 
   readonly bucket: string;
 
-  constructor(@Inject(configuer.KEY) config: IAppConfig) {
+  constructor(
+    @Inject(configuer.KEY)
+    config: IAppConfig,
+  ) {
     const { endpoint, port, useSsl, accessKey, secretKey, bucket } =
       config.minio;
 
     this.bucket = bucket;
+
     this.client = new Minio.Client({
       endPoint: endpoint,
       port,
@@ -45,71 +51,106 @@ export class MinioStorageService implements OnModuleInit {
     this.logger.log(`MinIO ready: ${this.bucket}`);
   }
 
-  /** Lists the requested prefix lazily so callers can stop on the first match. */
-  async *listObjects(prefix: string): AsyncGenerator<MinioObjectInfo> {
-    const stream = this.client.listObjectsV2(this.bucket, prefix, true);
-    try {
-      for await (const object of stream as AsyncIterable<Minio.BucketItem>) {
-        if (object.name === undefined) continue;
-        yield {
-          objectKey: object.name,
-          size: object.size,
-          etag: object.etag,
-        };
-      }
-    } finally {
-      stream.destroy();
-    }
-  }
-
-  /** Rechecks object metadata instead of relying on an earlier listing snapshot. */
-  async getObjectInfo(objectKey: string): Promise<MinioObjectInfo | null> {
-    try {
-      const info = await this.client.statObject(this.bucket, objectKey);
-      return { objectKey, size: info.size, etag: info.etag };
-    } catch (error) {
-      if (
-        error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        (error.code === 'NoSuchKey' || error.code === 'NotFound')
-      ) {
-        return null;
-      }
-      throw error;
-    }
-  }
-
-  // Checks whether an object exists while propagating storage access failures.
-  async objectExists(objectKey: string): Promise<boolean> {
-    return (await this.getObjectInfo(objectKey)) !== null;
-  }
-
+  /**
+   * Uploads a stream with known size and SHA-256 metadata.
+   */
   async uploadStream(
     objectKey: string,
     stream: Readable,
+    size: number,
     mimeType: string,
+    sha256: string,
   ): Promise<StoredMinioObject> {
     const result = await this.client.putObject(
       this.bucket,
       objectKey,
       stream,
-      undefined,
+      size,
       {
         'Content-Type': mimeType,
+        'x-amz-meta-sha256': sha256,
       },
     );
 
     return this.getStoredObject(objectKey, result.etag);
   }
 
-  /** Refreshes a stored object's download URL without uploading its bytes again. */
+  /**
+   * Checks an existing object using its deterministic key.
+   */
+  async getExistingObject(
+    objectKey: string,
+    expectedSize: number,
+    expectedSha256: string,
+  ): Promise<StoredMinioObject | null> {
+    const current = await this.getObjectInfo(objectKey);
+
+    if (!current) {
+      return null;
+    }
+
+    // Same content already exists.
+    if (current.size === expectedSize && current.sha256 === expectedSha256) {
+      return this.getStoredObject(current.objectKey, current.etag);
+    }
+
+    // Existing object is not a valid match.
+    this.logger.warn({
+      message: 'Existing object failed integrity check',
+      objectKey,
+      expectedSize,
+      actualSize: current.size,
+    });
+
+    return null;
+  }
+
+  /**
+   * Retrieves object information from MinIO.
+   */
+  async getObjectInfo(objectKey: string): Promise<MinioObjectInfo | null> {
+    try {
+      const info = await this.client.statObject(this.bucket, objectKey);
+
+      const metadata =
+        (
+          info as typeof info & {
+            metaData?: Record<string, string>;
+          }
+        ).metaData ?? {};
+
+      const sha256 = Object.entries(metadata).find(
+        ([key]) => key.toLowerCase() === 'x-amz-meta-sha256',
+      )?.[1];
+
+      return {
+        objectKey,
+        size: info.size,
+        etag: info.etag,
+        sha256,
+      };
+    } catch (error) {
+      if (this.isNotFoundError(error)) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
+  async objectExists(objectKey: string): Promise<boolean> {
+    return (await this.getObjectInfo(objectKey)) !== null;
+  }
+
+  /**
+   * Generates a temporary download URL.
+   */
   async getStoredObject(
     objectKey: string,
     etag: string,
   ): Promise<StoredMinioObject> {
-    // S3 signatures use second precision; use the same instant for expiry metadata.
     const signedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+
     const url = await this.client.presignedGetObject(
       this.bucket,
       objectKey,
@@ -129,26 +170,21 @@ export class MinioStorageService implements OnModuleInit {
     };
   }
 
-  async exists(
-    conversationId: string,
-    messageId: string,
-    size: number,
-  ): Promise<StoredMinioObject | null> {
-    const prefix = `conversations/${safeId(conversationId)}/`;
-    const expectedMessageId = safeId(messageId);
-    for await (const candidate of this.listObjects(prefix)) {
-      if (!candidate.objectKey.startsWith(prefix) || candidate.size !== size)
-        continue;
-      const filename = candidate.objectKey.slice(prefix.length);
-      if (filename.includes('/')) continue;
-      // Filenames are date_uuid_messageId.ext; compare the full message ID.
-      const storedMessageId = filename.match(/^[^_]+_[^_]+_(.+)\.[^.]+$/)?.[1];
-      if (storedMessageId !== expectedMessageId) continue;
-      // Confirm the object still exists and its current size agrees with listing.
-      const current = await this.getObjectInfo(candidate.objectKey);
-      if (!current || current.size !== size) continue;
-      return this.getStoredObject(current.objectKey, current.etag);
+  private isNotFoundError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
     }
-    return null;
+
+    const candidate = error as {
+      code?: string;
+      statusCode?: number;
+    };
+
+    return (
+      candidate.statusCode === 404 ||
+      candidate.code === 'NoSuchKey' ||
+      candidate.code === 'NoSuchObject' ||
+      candidate.code === 'NotFound'
+    );
   }
 }

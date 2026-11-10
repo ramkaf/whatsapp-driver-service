@@ -400,7 +400,9 @@ export const ModelName = {
   WaSession: 'WaSession',
   WaAuthCreds: 'WaAuthCreds',
   WaAuthKey: 'WaAuthKey',
-  WaSessionEvent: 'WaSessionEvent'
+  WaSessionEvent: 'WaSessionEvent',
+  WhatsappMessageInbox: 'WhatsappMessageInbox',
+  WhatsappMessageOutbox: 'WhatsappMessageOutbox'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -416,7 +418,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "waSession" | "waAuthCreds" | "waAuthKey" | "waSessionEvent"
+    modelProps: "waSession" | "waAuthCreds" | "waAuthKey" | "waSessionEvent" | "whatsappMessageInbox" | "whatsappMessageOutbox"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -684,6 +686,138 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    WhatsappMessageInbox: {
+      payload: Prisma.$WhatsappMessageInboxPayload<ExtArgs>
+      fields: Prisma.WhatsappMessageInboxFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WhatsappMessageInboxFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageInboxPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WhatsappMessageInboxFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageInboxPayload>
+        }
+        findFirst: {
+          args: Prisma.WhatsappMessageInboxFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageInboxPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WhatsappMessageInboxFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageInboxPayload>
+        }
+        findMany: {
+          args: Prisma.WhatsappMessageInboxFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageInboxPayload>[]
+        }
+        create: {
+          args: Prisma.WhatsappMessageInboxCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageInboxPayload>
+        }
+        createMany: {
+          args: Prisma.WhatsappMessageInboxCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        delete: {
+          args: Prisma.WhatsappMessageInboxDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageInboxPayload>
+        }
+        update: {
+          args: Prisma.WhatsappMessageInboxUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageInboxPayload>
+        }
+        deleteMany: {
+          args: Prisma.WhatsappMessageInboxDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WhatsappMessageInboxUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        upsert: {
+          args: Prisma.WhatsappMessageInboxUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageInboxPayload>
+        }
+        aggregate: {
+          args: Prisma.WhatsappMessageInboxAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWhatsappMessageInbox>
+        }
+        groupBy: {
+          args: Prisma.WhatsappMessageInboxGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WhatsappMessageInboxGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WhatsappMessageInboxCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WhatsappMessageInboxCountAggregateOutputType> | number
+        }
+      }
+    }
+    WhatsappMessageOutbox: {
+      payload: Prisma.$WhatsappMessageOutboxPayload<ExtArgs>
+      fields: Prisma.WhatsappMessageOutboxFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WhatsappMessageOutboxFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageOutboxPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WhatsappMessageOutboxFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageOutboxPayload>
+        }
+        findFirst: {
+          args: Prisma.WhatsappMessageOutboxFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageOutboxPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WhatsappMessageOutboxFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageOutboxPayload>
+        }
+        findMany: {
+          args: Prisma.WhatsappMessageOutboxFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageOutboxPayload>[]
+        }
+        create: {
+          args: Prisma.WhatsappMessageOutboxCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageOutboxPayload>
+        }
+        createMany: {
+          args: Prisma.WhatsappMessageOutboxCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        delete: {
+          args: Prisma.WhatsappMessageOutboxDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageOutboxPayload>
+        }
+        update: {
+          args: Prisma.WhatsappMessageOutboxUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageOutboxPayload>
+        }
+        deleteMany: {
+          args: Prisma.WhatsappMessageOutboxDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WhatsappMessageOutboxUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        upsert: {
+          args: Prisma.WhatsappMessageOutboxUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WhatsappMessageOutboxPayload>
+        }
+        aggregate: {
+          args: Prisma.WhatsappMessageOutboxAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWhatsappMessageOutbox>
+        }
+        groupBy: {
+          args: Prisma.WhatsappMessageOutboxGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WhatsappMessageOutboxGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WhatsappMessageOutboxCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WhatsappMessageOutboxCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -781,6 +915,39 @@ export const WaSessionEventScalarFieldEnum = {
 export type WaSessionEventScalarFieldEnum = (typeof WaSessionEventScalarFieldEnum)[keyof typeof WaSessionEventScalarFieldEnum]
 
 
+export const WhatsappMessageInboxScalarFieldEnum = {
+  id: 'id',
+  key: 'key',
+  payload: 'payload',
+  haveMedia: 'haveMedia',
+  mediaStatus: 'mediaStatus',
+  mediaObjectKey: 'mediaObjectKey',
+  mediaMimeType: 'mediaMimeType',
+  mediaUploadedAt: 'mediaUploadedAt',
+  status: 'status',
+  sessionId: 'sessionId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type WhatsappMessageInboxScalarFieldEnum = (typeof WhatsappMessageInboxScalarFieldEnum)[keyof typeof WhatsappMessageInboxScalarFieldEnum]
+
+
+export const WhatsappMessageOutboxScalarFieldEnum = {
+  id: 'id',
+  inboxId: 'inboxId',
+  payload: 'payload',
+  status: 'status',
+  retryCount: 'retryCount',
+  lastError: 'lastError',
+  publishedAt: 'publishedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type WhatsappMessageOutboxScalarFieldEnum = (typeof WhatsappMessageOutboxScalarFieldEnum)[keyof typeof WhatsappMessageOutboxScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -866,6 +1033,26 @@ export const WaSessionEventOrderByRelevanceFieldEnum = {
 export type WaSessionEventOrderByRelevanceFieldEnum = (typeof WaSessionEventOrderByRelevanceFieldEnum)[keyof typeof WaSessionEventOrderByRelevanceFieldEnum]
 
 
+export const WhatsappMessageInboxOrderByRelevanceFieldEnum = {
+  id: 'id',
+  key: 'key',
+  mediaObjectKey: 'mediaObjectKey',
+  mediaMimeType: 'mediaMimeType',
+  sessionId: 'sessionId'
+} as const
+
+export type WhatsappMessageInboxOrderByRelevanceFieldEnum = (typeof WhatsappMessageInboxOrderByRelevanceFieldEnum)[keyof typeof WhatsappMessageInboxOrderByRelevanceFieldEnum]
+
+
+export const WhatsappMessageOutboxOrderByRelevanceFieldEnum = {
+  id: 'id',
+  inboxId: 'inboxId',
+  lastError: 'lastError'
+} as const
+
+export type WhatsappMessageOutboxOrderByRelevanceFieldEnum = (typeof WhatsappMessageOutboxOrderByRelevanceFieldEnum)[keyof typeof WhatsappMessageOutboxOrderByRelevanceFieldEnum]
+
+
 
 /**
  * Field references
@@ -932,6 +1119,27 @@ export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$Prisma
  * Reference to a field of type 'WaSessionEventType'
  */
 export type EnumWaSessionEventTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'WaSessionEventType'>
+    
+
+
+/**
+ * Reference to a field of type 'WhatsappMessageMediaStatus'
+ */
+export type EnumWhatsappMessageMediaStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'WhatsappMessageMediaStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'WhatsappMessageInboxStatus'
+ */
+export type EnumWhatsappMessageInboxStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'WhatsappMessageInboxStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'WhatsappMessageOutboxStatus'
+ */
+export type EnumWhatsappMessageOutboxStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'WhatsappMessageOutboxStatus'>
     
 
 
@@ -1096,6 +1304,8 @@ export type GlobalOmitConfig = {
   waAuthCreds?: Prisma.WaAuthCredsOmit
   waAuthKey?: Prisma.WaAuthKeyOmit
   waSessionEvent?: Prisma.WaSessionEventOmit
+  whatsappMessageInbox?: Prisma.WhatsappMessageInboxOmit
+  whatsappMessageOutbox?: Prisma.WhatsappMessageOutboxOmit
 }
 
 /* Types for Logging */

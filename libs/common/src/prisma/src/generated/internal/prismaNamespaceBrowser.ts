@@ -54,7 +54,9 @@ export const ModelName = {
   WaSession: 'WaSession',
   WaAuthCreds: 'WaAuthCreds',
   WaAuthKey: 'WaAuthKey',
-  WaSessionEvent: 'WaSessionEvent'
+  WaSessionEvent: 'WaSessionEvent',
+  WhatsappMessageInbox: 'WhatsappMessageInbox',
+  WhatsappMessageOutbox: 'WhatsappMessageOutbox'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -129,6 +131,39 @@ export const WaSessionEventScalarFieldEnum = {
 } as const
 
 export type WaSessionEventScalarFieldEnum = (typeof WaSessionEventScalarFieldEnum)[keyof typeof WaSessionEventScalarFieldEnum]
+
+
+export const WhatsappMessageInboxScalarFieldEnum = {
+  id: 'id',
+  key: 'key',
+  payload: 'payload',
+  haveMedia: 'haveMedia',
+  mediaStatus: 'mediaStatus',
+  mediaObjectKey: 'mediaObjectKey',
+  mediaMimeType: 'mediaMimeType',
+  mediaUploadedAt: 'mediaUploadedAt',
+  status: 'status',
+  sessionId: 'sessionId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type WhatsappMessageInboxScalarFieldEnum = (typeof WhatsappMessageInboxScalarFieldEnum)[keyof typeof WhatsappMessageInboxScalarFieldEnum]
+
+
+export const WhatsappMessageOutboxScalarFieldEnum = {
+  id: 'id',
+  inboxId: 'inboxId',
+  payload: 'payload',
+  status: 'status',
+  retryCount: 'retryCount',
+  lastError: 'lastError',
+  publishedAt: 'publishedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type WhatsappMessageOutboxScalarFieldEnum = (typeof WhatsappMessageOutboxScalarFieldEnum)[keyof typeof WhatsappMessageOutboxScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -214,4 +249,24 @@ export const WaSessionEventOrderByRelevanceFieldEnum = {
 } as const
 
 export type WaSessionEventOrderByRelevanceFieldEnum = (typeof WaSessionEventOrderByRelevanceFieldEnum)[keyof typeof WaSessionEventOrderByRelevanceFieldEnum]
+
+
+export const WhatsappMessageInboxOrderByRelevanceFieldEnum = {
+  id: 'id',
+  key: 'key',
+  mediaObjectKey: 'mediaObjectKey',
+  mediaMimeType: 'mediaMimeType',
+  sessionId: 'sessionId'
+} as const
+
+export type WhatsappMessageInboxOrderByRelevanceFieldEnum = (typeof WhatsappMessageInboxOrderByRelevanceFieldEnum)[keyof typeof WhatsappMessageInboxOrderByRelevanceFieldEnum]
+
+
+export const WhatsappMessageOutboxOrderByRelevanceFieldEnum = {
+  id: 'id',
+  inboxId: 'inboxId',
+  lastError: 'lastError'
+} as const
+
+export type WhatsappMessageOutboxOrderByRelevanceFieldEnum = (typeof WhatsappMessageOutboxOrderByRelevanceFieldEnum)[keyof typeof WhatsappMessageOutboxOrderByRelevanceFieldEnum]
 
