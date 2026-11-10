@@ -9,13 +9,14 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: new AfraLogger(),
   });
+  app.enableShutdownHooks();
   const config = app.get<IAppConfig>(configuer.KEY);
   app.setGlobalPrefix(config.apiPrefix);
   app.enableCors({
     origin: config.corsOrigins.includes('*') ? '*' : config.corsOrigins,
   });
   await app.listen(config.port);
-  const logger = new Logger("bootstrap");
+  const logger = new Logger('bootstrap');
   logger.log('test', await app.getUrl());
 }
 await bootstrap();

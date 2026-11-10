@@ -44,6 +44,10 @@ const config = app.get(configuer.KEY);
 
 تنظیمات اتصال APM و RabbitMQ باید با environment هر پروژه کنترل شوند. secretها نباید در Git commit شوند.
 
+### RabbitMQ
+
+ماژول مشترک ارسال و دریافت Simple و RPC، با topology ثابت در فایل JSON مشترک و راه‌اندازی خودکار هنگام شروع هر میکروسرویس، در `libs/common/src/rabbitmq` قرار دارد. [راهنمای ثبت ماژول، JSON و مثال‌ها](rabbitmq.md) را ببینید.
+
 ### helper و proxy
 
 این مسیرها برای helperهای عمومی و proxyهای مشترک رزرو شده‌اند. کد اختصاصی domain را در این بخش قرار ندهید؛ اگر کدی فقط برای یک سرویس لازم است، آن را در `src` همان سرویس نگه دارید.
