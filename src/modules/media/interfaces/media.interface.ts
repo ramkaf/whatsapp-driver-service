@@ -1,10 +1,7 @@
+import type { WAMessage } from '@whiskeysockets/baileys';
+import type { Readable } from 'node:stream';
 import type { WASocket } from '@whiskeysockets/baileys';
 
-/** The only socket capability required to refresh expired media URLs. */
-export type WhatsappMediaSocket = Pick<WASocket, 'updateMediaMessage'>;
-
-export type MediaType =
-  'image' | 'video' | 'voice' | 'audio' | 'document' | 'sticker';
 export interface MediaDescriptor {
   type: MediaType;
   mimeType: string;
@@ -29,9 +26,55 @@ export interface StoredMinioObject {
 
 export interface StoredWhatsappMedia extends StoredMinioObject {
   chatId: string;
-  senderId: string;
   messageId: string;
   type: MediaType;
   mimeType: string;
   originalFileName: string | null;
 }
+export type MediaType =
+  'image' | 'video' | 'audio' | 'voice' | 'document' | 'sticker';
+
+export interface MediaDescriptor {
+  type: MediaType;
+  mimeType: string;
+  extension: string;
+  originalFileName: string | null;
+}
+
+export interface PreparedMedia {
+  media: MediaDescriptor;
+  chatId: string;
+  messageId: string;
+}
+
+export interface TemporaryMediaFile {
+  directory: string;
+  filePath: string;
+  size: number;
+  sha256: string;
+}
+
+export interface MinioObjectInfo {
+  objectKey: string;
+  size: number;
+  etag: string;
+  sha256?: string;
+}
+
+export interface StoredMinioObject {
+  bucket: string;
+  objectKey: string;
+  etag: string;
+  url: string;
+  urlExpiresAt: string;
+}
+
+export interface StoredWhatsappMedia extends StoredMinioObject {
+  chatId: string;
+  messageId: string;
+  type: MediaType;
+  mimeType: string;
+  originalFileName: string | null;
+  sha256: string;
+}
+export type WhatsappMediaSocket = Pick<WASocket, 'updateMediaMessage'>;

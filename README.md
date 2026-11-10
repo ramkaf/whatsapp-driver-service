@@ -13,8 +13,18 @@ pnpm run prepare
 
 Tests live in a `__test__` subdirectory of their owning module or library.
 Application-wide integration tests live in `src/__test__`, and Swagger integration
-tests live in `src/swagger/__test__`. Run `pnpm test` for unit tests and
-`pnpm test:e2e` for HTTP integration tests. Test folders are excluded from builds.
+tests live in `src/swagger/__test__`. Run `pnpm test` for unit, component and media
+integration tests, and `pnpm test:e2e` for HTTP integration tests. Test folders are
+excluded from builds.
+
+The suites mock WhatsApp downloads, database operations and external storage;
+they do not require a paired account or live infrastructure. WebSocket transport
+tests open a local loopback port. Event templates are checked for registration
+and routing; persistence and media processing are tested through the inbox worker.
+
+Run `pnpm run test:cov` to generate `coverage/index.html` and
+`coverage/coverage-summary.json`. This report covers the unit/component suite;
+generated Prisma code, test fixtures and declaration files are excluded.
 
 ## Local connection test panel
 

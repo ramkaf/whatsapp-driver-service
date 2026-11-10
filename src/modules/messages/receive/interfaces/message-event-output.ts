@@ -9,8 +9,3 @@ export interface ReceivedMessageEvent {
   media?: StoredWhatsappMedia;
   mediaError?: 'MEDIA_STORAGE_FAILED';
 }
-
-/** Replace this output to store or forward messages without changing event handlers. */
-export abstract class MessageEventOutput {
-  abstract write(event: ReceivedMessageEvent): void | Promise<void>;
-}

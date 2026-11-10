@@ -19,6 +19,7 @@ import { DisconnectReason } from '@whiskeysockets/baileys';
 import type {
   ConnectionState,
   AuthenticationCreds,
+  WASocket,
 } from '@whiskeysockets/baileys';
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
@@ -80,6 +81,34 @@ export class SessionManagerService
       this.runtimes.set(row.id, runtime);
     }
     return runtime;
+  }
+
+  getSocket(sessionId: string): WASocket | undefined {
+    return this.runtimes.get(sessionId)?.socket ?? undefined;
+  }
+
+  getSockets(): Map<string, WASocket> {
+    const sockets = new Map<string, WASocket>();
+
+    for (const [sessionId, runtime] of this.runtimes) {
+      if (runtime.socket) {
+        sockets.set(sessionId, runtime.socket);
+      }
+    }
+
+    return sockets;
+  }
+
+  getConnectedSockets(): Map<string, WASocket> {
+    const sockets = new Map<string, WASocket>();
+
+    for (const [sessionId, runtime] of this.runtimes) {
+      if (runtime.status === 'CONNECTED' && runtime.socket?.ws.isOpen) {
+        sockets.set(sessionId, runtime.socket);
+      }
+    }
+
+    return sockets;
   }
 
   // Account commands share a lock with replacement, even when their row IDs differ.

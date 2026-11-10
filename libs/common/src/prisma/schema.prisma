@@ -102,3 +102,60 @@ model WaSessionEvent {
   @@index([sessionId, createdAt])
   @@map("wa_session_events")
 }
+
+enum WhatsappMessageInboxStatus {
+  RECEIVED
+  READY
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum WhatsappMessageMediaStatus {
+  NOT_REQUIRED
+  PENDING
+  PROCESSING
+  UPLOADED
+  FAILED
+}
+
+model WhatsappMessageInbox {
+  id              String                    @id @default(cuid())
+  key             String                    @unique @db.VarChar(191)
+  payload         Json
+  haveMedia       Boolean                   @default(false)
+  mediaStatus     WhatsappMessageMediaStatus @default(NOT_REQUIRED)
+  mediaObjectKey  String?                   @db.VarChar(1024)
+  mediaMimeType   String?                   @db.VarChar(150)
+  mediaUploadedAt DateTime?
+  status          WhatsappMessageInboxStatus @default(RECEIVED)
+  sessionId       String                     @default("cmw98k683027xdlh6dvvycc7b") @db.VarChar(191)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  @@map("whatsapp_message_inbox")
+}
+
+enum WhatsappMessageOutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
+model WhatsappMessageOutbox {
+  id          String   @id @default(cuid())
+  inboxId     String   @unique
+  payload     Json
+
+  status      WhatsappMessageOutboxStatus @default(PENDING)
+  retryCount  Int      @default(0)
+  lastError   String?  @db.Text
+  publishedAt DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@map("whatsapp_message_outbox")
+}

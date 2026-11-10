@@ -4,7 +4,7 @@ import { SocketEventRegistrarService } from '../providers/socket/socket-event-re
 import type { RealtimeService } from '../providers/realtime/realtime.service.ts';
 
 describe('SocketEventRegistrarService', () => {
-  it('scopes message events and filters connection secrets before publication', () => {
+  it('scopes application events and filters connection secrets before publication', () => {
     const publish = vi.fn();
     const service = new SocketEventRegistrarService({
       publish,
@@ -12,8 +12,12 @@ describe('SocketEventRegistrarService', () => {
     const ev = new EventEmitter();
     service.register('one', { ev } as unknown as WASocket);
     const messages = { messages: [{ text: 'hello' }] };
+    const contacts = [{ id: 'contact@s.whatsapp.net', name: 'Contact' }];
+    const mapping = { lid: 'contact@lid', pn: 'contact@s.whatsapp.net' };
     ev.emit('messages.upsert', messages);
     ev.emit('messages.update', []);
+    ev.emit('contacts.upsert', contacts);
+    ev.emit('lid-mapping.update', mapping);
     ev.emit('connection.update', {
       connection: 'connecting',
       qr: 'secret',
@@ -24,6 +28,8 @@ describe('SocketEventRegistrarService', () => {
     expect(publish.mock.calls).toEqual([
       ['one', 'messages.upsert', messages],
       ['one', 'messages.update', []],
+      ['one', 'contacts.upsert', contacts],
+      ['one', 'lid-mapping.update', mapping],
       [
         'one',
         'connection.update',

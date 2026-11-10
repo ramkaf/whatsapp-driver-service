@@ -61,3 +61,13 @@ export type WaAuthKey = Prisma.WaAuthKeyModel
  * 
  */
 export type WaSessionEvent = Prisma.WaSessionEventModel
+/**
+ * Model WhatsappMessageInbox
+ * 
+ */
+export type WhatsappMessageInbox = Prisma.WhatsappMessageInboxModel
+/**
+ * Model WhatsappMessageOutbox
+ * 
+ */
+export type WhatsappMessageOutbox = Prisma.WhatsappMessageOutboxModel
