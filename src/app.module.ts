@@ -3,6 +3,7 @@ import { AppConfigModule, RabbitMQModule } from '@libs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller.ts';
 import { AppService } from './app.service.ts';
+import { PrismaModule } from '@libs/prisma';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AppService } from './app.service.ts';
         ),
       }),
     }),
+    PrismaModule,
   ],
   controllers: [AppController],
   providers: [AppService],
