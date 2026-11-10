@@ -28,7 +28,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "precommit": "pnpm run lint && pnpm run typecheck ",
     "prepush": "pnpm run precommit && pnpm test ",
-    "prepare": "husky && pnpm run build"
+    "prepare": "husky && pnpm run build",
+    "test:integration": "vitest run --config ./vitest.config.integration.ts"
   },
   "dependencies": {
     "@afra/exchange-logger": "^3.0.5",
@@ -39,7 +40,8 @@
     "amqplib": "^2.2.0",
     "class-validator": "^0.15.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "elastic-apm-node": "^4.18.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",

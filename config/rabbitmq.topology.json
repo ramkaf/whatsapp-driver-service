@@ -1,0 +1,22 @@
+{
+  "exchanges": [
+    {
+      "name": "users",
+      "type": "direct",
+      "durable": true
+    }
+  ],
+  "queues": [
+    {
+      "name": "sms",
+      "durable": true
+    }
+  ],
+  "bindings": [
+    {
+      "queue": "sms",
+      "exchange": "users",
+      "routingKey": "user.registered"
+    }
+  ]
+}
