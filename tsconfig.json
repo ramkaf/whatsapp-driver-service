@@ -21,12 +21,25 @@
     "strictPropertyInitialization": false,
     "types": ["vitest/globals", "node"],
     "paths": {
-      "@libs/common": ["./libs/common/src/index.ts"],
-      "@libs/common/*": ["./libs/common/src/*"],
-      "@libs/interface": ["./libs/interface/src/index.ts"],
-      "@libs/interface/*": ["./libs/interface/src/*"],
-      "@libs/prisma": ["./libs/common/src/prisma/src/index.ts"],
-      "@libs/prisma/*": ["./libs/common/src/prisma/src/*"]
+      "@database/*": ["./prisma/generated/prisma/*"],
+      "@libs/common": [
+        "./libs/common/src/index.ts"
+      ],
+      "@libs/common/*": [
+        "./libs/common/src/*"
+      ],
+      "@libs/interface": [
+        "./libs/interface/src/index.ts"
+      ],
+      "@libs/interface/*": [
+        "./libs/interface/src/*"
+      ],
+      "@libs/prisma": [
+        "./libs/prisma/src/index.ts"
+      ],
+      "@libs/prisma/*": [
+        "./libs/prisma/src/*"
+      ]
     }
   }
 }

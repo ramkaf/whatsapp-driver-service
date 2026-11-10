@@ -1,6 +1,6 @@
 import { configuer } from '@libs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module.js';
+import { AppModule } from './app.module.ts';
 import type { IAppConfig } from '../libs/common/src/config/index.ts';
 import { PersistenceFilter } from './modules/sessions/filters/persistence.filter.ts';
 import { setupSwagger } from './swagger/setup-swagger.ts';
@@ -13,6 +13,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: new Logger(),
   });
+  app.enableShutdownHooks();
   const config = app.get<IAppConfig>(configuer.KEY);
   app.enableShutdownHooks();
   app.useGlobalPipes(

@@ -28,12 +28,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "precommit": "pnpm run lint && pnpm run typecheck ",
     "prepush": "pnpm run precommit && pnpm test ",
-    "prepare": "husky && pnpm run build",
-    "prisma:generate": "prisma generate",
-    "prisma:validate": "prisma validate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio"
+    "prepare": "husky",
+    "build": "pnpm run db:generate && nest build",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:format": "prisma format",
+    "db:studio": "prisma studio",
+    "db:pull": "prisma db pull && prisma generate",
+    "db-pull": "pnpm run db:pull"
   },
   "dependencies": {
     "@afra/exchange-logger": "^3.0.5",
@@ -54,9 +56,12 @@
     "minio": "^8.0.7",
     "pino": "^10.4.0",
     "qrcode": "^1.5.4",
+    "dotenv": "^18.0.9",
+    "mariadb": "^3.5.5",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "ws": "^8.22.1"
+    "ws": "^8.22.1",
+    "elastic-apm-node": "^4.18.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",

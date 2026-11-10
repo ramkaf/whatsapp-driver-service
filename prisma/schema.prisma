@@ -1,0 +1,12 @@
+generator client {
+  provider               = "prisma-client"
+  output                 = "./generated/prisma"
+  previewFeatures        = ["views"]
+  generatedFileExtension = "ts"
+  importFileExtension    = "ts"
+  moduleFormat           = "esm"
+}
+
+datasource db {
+  provider = "mysql"
+}
