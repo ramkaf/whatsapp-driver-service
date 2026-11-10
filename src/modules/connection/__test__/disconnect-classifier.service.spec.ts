@@ -1,8 +1,7 @@
 import { DisconnectReason } from '@whiskeysockets/baileys';
-import { DisconnectClassifierService } from '../providers/disconnect/disconnect-classifier.service.ts';
+import { classifyDisconnect } from '../utils/disconnect-classifier.util.ts';
 
 describe('disconnect classification', () => {
-  const handler = new DisconnectClassifierService();
   function update(code: number, message = 'Connection closed') {
     return {
       connection: 'close' as const,
@@ -23,13 +22,14 @@ describe('disconnect classification', () => {
     [DisconnectReason.forbidden, 'invalid', 'FORBIDDEN'],
     [DisconnectReason.connectionClosed, 'retry', 'SOCKET_CLOSED'],
     [DisconnectReason.connectionLost, 'retry', 'TIMEOUT_OR_CONNECTION_LOST'],
+    [DisconnectReason.timedOut, 'retry', 'TIMEOUT_OR_CONNECTION_LOST'],
     [DisconnectReason.restartRequired, 'restart', 'RESTART_REQUIRED'],
     [DisconnectReason.unavailableService, 'retry', 'SERVICE_UNAVAILABLE'],
     [999, 'retry', 'UNKNOWN_CLOSE'],
   ] as const)(
     'classifies code %s without guessing the underlying cause',
     (code, action, reason) => {
-      expect(handler.classify(update(code).lastDisconnect.error)).toEqual({
+      expect(classifyDisconnect(update(code).lastDisconnect.error)).toEqual({
         code,
         action,
         reason,
@@ -39,28 +39,54 @@ describe('disconnect classification', () => {
 
   it('distinguishes exhausted QR attempts from a network timeout with the same code', () => {
     expect(
-      handler.classify(
+      classifyDisconnect(
         update(408, 'QR refs attempts ended').lastDisconnect.error,
       ),
     ).toMatchObject({ action: 'expired', reason: 'QR_EXPIRED' });
-    expect(handler.classify(update(408).lastDisconnect.error)).toMatchObject({
+    expect(classifyDisconnect(update(408).lastDisconnect.error)).toMatchObject({
       action: 'retry',
       reason: 'TIMEOUT_OR_CONNECTION_LOST',
     });
+    expect(
+      classifyDisconnect(
+        update(503, 'QR refs attempts ended').lastDisconnect.error,
+      ),
+    ).toMatchObject({ action: 'retry', reason: 'SERVICE_UNAVAILABLE' });
   });
   it.each([
     undefined,
     null,
     'error',
+    42,
     {},
+    new Error('closed'),
+    { message: 'closed' },
     { output: null },
+    { output: 'invalid' },
+    { output: {} },
     { output: { statusCode: '401' } },
     { output: { statusCode: NaN } },
+    { output: { statusCode: Infinity } },
   ])('uses the unknown-close fallback for malformed errors: %s', (error) => {
-    expect(handler.classify(error)).toEqual({
+    expect(classifyDisconnect(error)).toEqual({
       code: null,
       action: 'retry',
       reason: 'UNKNOWN_CLOSE',
+    });
+  });
+
+  it.each([
+    123,
+    null,
+    { toString: () => 'QR refs attempts ended' },
+    ['QR refs attempts ended'],
+  ])('does not coerce a non-string message into QR expiry: %j', (message) => {
+    expect(
+      classifyDisconnect({ output: { statusCode: 408 }, message }),
+    ).toEqual({
+      code: 408,
+      action: 'retry',
+      reason: 'TIMEOUT_OR_CONNECTION_LOST',
     });
   });
 });

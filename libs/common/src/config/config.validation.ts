@@ -8,7 +8,6 @@ export function validateEnvironment(
 
   for (const key of [
     'WA_MAX_SESSIONS',
-    'WA_MAX_RETRIES',
     'WA_STARTUP_CONCURRENCY',
     'WA_STARTUP_STAGGER_MS',
     'WA_WATCHDOG_INTERVAL_MS',
@@ -26,6 +25,7 @@ export function validateEnvironment(
     'REDIS_CONNECTION_ATTEMPTS',
     'REDIS_RETRY_DELAY_MS',
     'REDIS_MAX_RETRY_DELAY_MS',
+    'MINIO_PORT',
   ] as const) {
     if (env[key] !== undefined) {
       const value = env[key];
@@ -37,6 +37,9 @@ export function validateEnvironment(
             : Number.NaN;
     }
   }
+
+  if (env.MINIO_USE_SSL === 'true') variables.MINIO_USE_SSL = true;
+  if (env.MINIO_USE_SSL === 'false') variables.MINIO_USE_SSL = false;
 
   const errors = validateSync(variables);
   if (errors.length > 0) {

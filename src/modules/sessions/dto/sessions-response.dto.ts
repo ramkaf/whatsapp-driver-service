@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { WaPairingMethod, WaSessionStatus } from '@libs/prisma';
+import { WaSessionStatus } from '@libs/prisma';
 import { CONNECTION_REASONS } from '../../connection/interfaces/connection-status.ts';
+import { PairingMethodEnum } from '../interfaces/session.interface.ts';
 
 export class RuntimeStatusDto {
   @ApiProperty({
@@ -76,15 +77,16 @@ export class RuntimeStatusDto {
 export class SessionResponseDto {
   @ApiProperty({ example: 'cmh1234560000sessionexample' }) id: string;
   @ApiProperty({ example: 'WhatsApp 01' }) name: string;
-  @ApiProperty({ type: String, nullable: true, example: '989121234567' })
-  phone: string | null;
-  @ApiProperty({ enum: WaPairingMethod, enumName: 'PairingMethod' })
+  @ApiProperty({ type: String, example: '989121234567' })
+  phone: string;
+  @ApiProperty({ enum: PairingMethodEnum, enumName: 'PairingMethod' })
   pairingMethod: string;
   @ApiProperty({
     example: true,
-    description: 'Controls automatic recovery after process restart.',
+    description:
+      'Controls automatic recovery. False after disconnect, logout or soft deletion; disabled sessions remain visible.',
   })
-  enabled: boolean;
+  isEnabled: boolean;
   @ApiProperty({
     enum: WaSessionStatus,
     enumName: 'SessionStatus',
@@ -110,8 +112,6 @@ export class SessionResponseDto {
   @ApiProperty({ type: Number, nullable: true, example: null })
   lastDisconnectCode: number | null;
   @ApiProperty({ type: String, nullable: true, example: null }) lastError:
-    string | null;
-  @ApiProperty({ type: String, nullable: true, example: null }) instanceId:
     string | null;
   @ApiProperty({
     type: String,
@@ -149,7 +149,7 @@ export class PairingCodeResponseDto {
 
 export class QrResponseDto {
   @ApiProperty({ example: 'cmh1234560000sessionexample' }) sessionId: string;
-  @ApiProperty({ enum: WaPairingMethod, enumName: 'PairingMethod' })
+  @ApiProperty({ enum: PairingMethodEnum, enumName: 'PairingMethod' })
   pairingMethod: string;
   @ApiProperty({ enum: WaSessionStatus, enumName: 'SessionStatus' })
   status: string;

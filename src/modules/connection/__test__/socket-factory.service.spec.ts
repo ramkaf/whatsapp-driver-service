@@ -31,8 +31,8 @@ describe('SocketFactoryService', () => {
     });
     expect(first.msgRetryCounterCache).not.toBe(second.msgRetryCounterCache);
     expect(register.mock.calls).toEqual([
-      ['one', socket],
-      ['two', socket],
+      ['one', socket, expect.any(Function)],
+      ['two', socket, expect.any(Function)],
     ]);
   });
 });

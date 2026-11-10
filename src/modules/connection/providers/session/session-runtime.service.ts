@@ -6,6 +6,7 @@ import type {
   SessionSnapshot,
 } from '../../interfaces/session-results.ts';
 import { CONNECTION_REASONS } from '../../interfaces/connection-status.ts';
+import { PairingMethodEnum } from '../../../sessions/interfaces/session.interface.ts';
 
 // Creates runtime state and projects public session and pairing information.
 @Injectable()
@@ -23,12 +24,12 @@ export class SessionRuntimeService {
       reason: null,
       lastDisconnectCode: null,
       lastDisconnectedAt: null,
-      pairingMethod: row.pairingMethod,
+      pairingMethod: row.pairingMethod as PairingMethodEnum,
       lastActivityAt: Date.now(),
       connectedAt: null,
       stateSince: Date.now(),
       stable: false,
-      intentionalStop: !row.enabled,
+      intentionalStop: !row.isEnabled,
       pairingReady: false,
       qr: null,
       code: null,

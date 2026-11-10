@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import makeWASocket, { Browsers } from '@whiskeysockets/baileys';
 import type { AuthenticationState, WASocket } from '@whiskeysockets/baileys';
 import pino from 'pino';
@@ -9,11 +9,16 @@ import { SocketEventRegistrarService } from './socket-event-registrar.service.ts
 // Builds configured Baileys sockets with isolated retry caches.
 @Injectable()
 export class SocketFactoryService {
-  constructor(private readonly events: SocketEventRegistrarService) {}
+  private readonly disposers = new WeakMap<WASocket, () => void>();
+  constructor(
+    @Inject(SocketEventRegistrarService)
+    private readonly events: SocketEventRegistrarService,
+  ) {}
   create(
     sessionId: string,
     auth: AuthenticationState,
     qrTimeout: number,
+    isCurrent = () => true,
   ): WASocket {
     const socket = makeWASocket({
       auth,
@@ -30,7 +35,15 @@ export class SocketFactoryService {
       msgRetryCounterCache: new RetryCache(),
       // Preserve default initial sync and LID mapping handling.
     });
-    this.events.register(sessionId, socket);
+    this.disposers.set(
+      socket,
+      this.events.register(sessionId, socket, isCurrent),
+    );
     return socket;
+  }
+
+  release(socket: WASocket): void {
+    this.disposers.get(socket)?.();
+    this.disposers.delete(socket);
   }
 }

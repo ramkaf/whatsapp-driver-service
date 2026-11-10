@@ -1,8 +1,9 @@
 import type { PairingSecret } from './session-results.ts';
 import type { WASocket } from '@whiskeysockets/baileys';
-import type { WaSessionStatus, WaPairingMethod } from '@libs/prisma';
+import type { WaSessionStatus } from '@libs/prisma';
 import type { AuthContext } from '../../auth-state/context/auth-state.context.ts';
 import type { CONNECTION_REASONS } from './connection-status.ts';
+import { PairingMethodEnum } from '../../sessions/interfaces/session.interface.ts';
 
 export interface SessionRuntime {
   sessionId: string;
@@ -16,7 +17,7 @@ export interface SessionRuntime {
   reason: CONNECTION_REASONS | null;
   lastDisconnectCode: number | null;
   lastDisconnectedAt: number | null;
-  pairingMethod: WaPairingMethod;
+  pairingMethod: PairingMethodEnum;
   lastActivityAt: number;
   connectedAt: number | null;
   stateSince: number;

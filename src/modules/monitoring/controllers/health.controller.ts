@@ -23,7 +23,7 @@ import { AdminGuard } from '../../sessions/guards/admin.guard.ts';
 })
 @UseGuards(AdminGuard)
 export class HealthController {
-  constructor(private readonly sessions: SessionsService) {}
+  constructor(private readonly sessionsService: SessionsService) {}
   @Get()
   @ApiOperation({
     summary: 'Get process health and aggregate session counts',
@@ -31,7 +31,7 @@ export class HealthController {
   })
   @ApiOkResponse({ type: HealthResponseDto })
   async health() {
-    const sessions = await this.sessions.list();
+    const sessions = await this.sessionsService.list();
     const counts = {
       total: sessions.length,
       connected: 0,

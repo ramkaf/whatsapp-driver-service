@@ -9,7 +9,7 @@ describe('SocketLifecycleService', () => {
   const create = () =>
     new SessionRuntimeService().create({
       id: 'one',
-      enabled: true,
+      isEnabled: true,
     } as WaSession);
   afterEach(() => vi.useRealTimers());
 

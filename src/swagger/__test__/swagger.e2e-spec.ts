@@ -27,7 +27,12 @@ describe('Swagger (e2e)', () => {
       await app.init();
       try {
         const base = prefix ? `/${prefix}` : '';
-        expect(Object.keys(document.paths)).toHaveLength(10);
+        expect(Object.keys(document.paths)).toHaveLength(8);
+        expect(document.paths[`${base}/sessions/{id}/status`]).toBeUndefined();
+        expect(
+          document.paths[`${base}/sessions/{id}/pairing-method`],
+        ).toBeUndefined();
+        expect(document.components!.schemas!.PairingMethodDto).toBeUndefined();
         expect(document.paths[`${base}/sessions`]!.get!.security).toEqual([
           { 'admin-token': [] },
         ]);
@@ -46,6 +51,14 @@ describe('Swagger (e2e)', () => {
           'content.application/json.examples.qr.value.pairingMethod',
           'QR',
         );
+        expect(body).toHaveProperty(
+          'content.application/json.examples.qr.value.phone',
+          '989131234567',
+        );
+        expect(document.components!.schemas!.CreateSessionDto).toHaveProperty(
+          'required',
+          expect.arrayContaining(['name', 'pairingMethod', 'phone']),
+        );
         expect(document.components!.schemas!.SessionResponseDto).toHaveProperty(
           'properties.runtime',
         );
@@ -58,6 +71,9 @@ describe('Swagger (e2e)', () => {
         expect(
           document.paths[`${base}/sessions/{id}`]!.delete!.responses,
         ).toHaveProperty('204');
+        expect(
+          document.paths[`${base}/sessions/{id}`]!.delete!.description,
+        ).toContain('isEnabled=false');
         expect(
           document.paths[`${base}/sessions/{id}/pairing-code`]!.post!.responses,
         ).toHaveProperty('429');

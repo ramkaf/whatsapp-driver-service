@@ -1,7 +1,8 @@
 # WhatsApp sessions and connections
 
 The manager runs in one Node.js process and supports up to 50 independent accounts.
-No Redis locks, queues, message handlers or extra Prisma clients are introduced.
+Connection lifecycle uses the existing Prisma client and in-process queues.
+Message handlers live separately in `src/modules/messages/receive/events`.
 The pre-existing Redis module remains available to the application but is not used
 by the WhatsApp modules. Do not run two application processes against these sessions.
 
@@ -27,14 +28,15 @@ Existing scaffold files under `src/modules/` are implemented in place:
 
 - `auth-state/auth-state/auth-state.service.ts`: MySQL credentials and Signal key
   storage, BufferJSON snapshots, protobuf rehydration, serialized durable writes.
-- `connection/session-manager/session-manager.service.ts`: sole runtime/socket
-  owner, per-session operation queue, generation fencing, cleanup and restoration.
+- `connection/providers/session/session-manager.service.ts`: sole runtime/socket
+  owner, connection update handling, per-session operation queue, generation
+  fencing, cleanup and restoration.
 - `connection/socket-factory/socket-factory.service.ts`: stable Ubuntu/Chrome
   browser identity, isolated bounded retry cache, default initial sync preserved.
-- `connection/connection-handler/connection-handler.service.ts`: normalizes
-  connection updates and classifies installed Baileys disconnect reasons.
-- `connection/connection-supervisor/connection-supervisor.service.ts`: bounded
-  exponential retry policy with jitter; counters reset after a stable connection.
+- `connection/utils/disconnect-classifier.util.ts`: reads
+  disconnect errors and classifies installed Baileys disconnect reasons.
+- `connection/connection-supervisor/connection-supervisor.service.ts`: capped
+  exponential reconnect delays with jitter; counters reset after a stable connection.
 - `pairing/pairing/pairing.service.ts`: CODE/QR workflows, phone validation and
   single-flight code requests. QR reads do not restart sockets.
 - `sessions/sessions/*`: validated REST controller and application operations.
@@ -68,18 +70,23 @@ The additive migration `20261104170000_session_lifecycle`:
 - Appends `AUTHENTICATING` to the status enum.
 - Makes Signal key type/ID comparisons binary so case-distinct keys stay separate.
 
-It does not drop tables, remove sessions, reset data or change previous migrations.
-The Prisma client has been regenerated. **The migration has not been executed.**
-After reviewing and explicitly approving it, apply through the normal deployment
-workflow:
+Subsequent migrations make `phone` required, replace `enabled` with `isEnabled`,
+and remove the unused `instance_id` column and its index. The current schema and
+generated client must reflect those changes; historical migrations stay intact.
+
+Check migration status and apply pending migrations during deployment:
 
 ```bash
+pnpm exec prisma migrate status
 pnpm run prisma:deploy
+pnpm run prisma:generate
 ```
 
 Do this before starting the new code: the new fields must exist in MySQL.
 Take normal database backups before deployment. There are no automatic migrations
-at application startup.
+at application startup. The development start scripts regenerate the client;
+restart the watcher after changing the schema or applying migrations so it cannot
+keep querying a removed column from an older generated client.
 
 ## Configuration
 
@@ -91,7 +98,6 @@ key; it is not printed in logs or documentation. Set your own production secret.
 | --- | --- | --- |
 | `WA_ADMIN_API_KEY` | Required, at least 32 characters | Bearer administration/pairing key |
 | `WA_MAX_SESSIONS` | `50` | Process account limit, maximum 50 |
-| `WA_MAX_RETRIES` | `10` | Consecutive reconnect threshold |
 | `WA_STARTUP_CONCURRENCY` | `2` | Initial connection attempts in flight, maximum 5 |
 | `WA_STARTUP_STAGGER_MS` | `500` | Delay between restoration attempts |
 | `WA_WATCHDOG_INTERVAL_MS` | `30000` | Monitoring interval |
@@ -126,35 +132,36 @@ If `APP_PORT` changes, use that port for the documentation URL too.
    aggregate counts. A 401 means the key is missing/wrong or authorization must
    be repeated after reloading the page.
 3. Execute **POST /api/sessions**. Select the `code` example and replace its phone
-   with your own valid international number. Use a unique name/phone. The 201
+   with your own valid international number. Reusing a phone replaces its current session. The 201
    response includes `id`; copy it for subsequent path parameters.
 4. Execute **POST /api/sessions/{id}/pairing-code** with that ID and body `{}`.
    It may wait for socket readiness. Enter the returned code in WhatsApp's
    linked-device phone-number linking flow. Do not treat AWAITING_PAIRING as
    success and do not share the code or its response.
-5. Execute **GET /api/sessions/{id}/status** until `runtime.connected` is true.
+5. Execute **GET /api/sessions/{id}** until `runtime.connected` is true.
    A brief AUTHENTICATING/RECONNECTING transition after pairing is expected.
-6. Test **disconnect**: authentication remains, `enabled` becomes false and no
+6. Test **disconnect**: authentication remains, `isEnabled` becomes false and no
    automatic reconnection occurs. Then test **reconnect**: the same persisted
    credentials should reconnect without another pairing step. Check status again.
 7. Stop the process with Ctrl+C and restart it with the same database. Enabled
    paired sessions should restore; manually disabled sessions stay disconnected.
    Check `runtime.connected` rather than relying on the stored CONNECTED status.
 
-For QR pairing, create a separate session using the `qr` example. Read
+For QR pairing, create a separate session using the `qr` example and provide its
+phone number, which is required for both QR and CODE. Read
 **GET /api/sessions/{id}/qr** until `qr` is non-null. Swagger shows a raw string,
 not a scannable image. Render that value locally in a trusted QR-capable UI, scan
 it from the phone's linked-device flow and poll status. Do not send the login QR
 to third-party conversion sites. Read again on refresh/expiry; the QR endpoint
 never restarts the socket. To explicitly renew expired pairing, use
-**POST /api/sessions/{id}/pairing-method** with `{"pairingMethod":"QR"}`.
+**POST /api/sessions/{id}/qr** with `{}`.
 
 Troubleshooting while using **Execute**:
 
 - **400**: inspect `message` for invalid fields/phone or an incompatible request.
 - **401**: repeat Authorize with the actual configured administration key.
 - **404**: replace the example ID with the ID returned when creating your session.
-- **409**: duplicate phone, already authenticated session, incompatible operation
+- **409**: active-session capacity, already authenticated session, incompatible operation
   or session limit. Reuse the existing session and choose reconnect when paired.
 - **429**: wait for the configured pairing rate-limit window before another new code.
 - **503**: inspect safe lifecycle logs and verify database/WhatsApp connectivity.
@@ -162,8 +169,8 @@ Troubleshooting while using **Execute**:
   account is already authenticated. Check the method/status and retry the read.
 
 `logout` intentionally unlinks a connected device and invalidates local auth;
-`DELETE` removes local session data. Use these only when testing those specific
-behaviors, after testing ordinary disconnect/reconnect.
+`DELETE` soft-deletes the session by setting `isEnabled=false` and stopping its
+socket. Metadata and authentication remain available for explicit reconnect.
 
 Swagger configuration follows the [NestJS OpenAPI setup](https://docs.nestjs.com/openapi/introduction).
 
@@ -178,15 +185,14 @@ and Baileys calls use E.164 digits without `+`.
 | --- | --- | --- |
 | POST | `/sessions` | Create metadata and initiate connection; does not wait for pairing |
 | GET | `/sessions` | List safe metadata and current runtime snapshots |
-| GET | `/sessions/:id` | Session details |
-| GET | `/sessions/:id/status` | Persisted metadata plus current runtime status |
+| GET | `/sessions/:id` | Persisted metadata plus current runtime status |
 | POST | `/sessions/:id/pairing-code` | Generate/reuse code; optional `{ "phone": "..." }` |
 | GET | `/sessions/:id/qr` | Current raw QR and application expiry, or null |
-| POST | `/sessions/:id/pairing-method` | Explicitly select CODE/QR on an unregistered session |
+| POST | `/sessions/:id/qr` | Select QR and start or renew pairing on an unregistered session |
 | POST | `/sessions/:id/reconnect` | Manual restart/reset retry count using persisted auth |
 | POST | `/sessions/:id/disconnect` | Disable automatic restore/retry, close without logout |
 | POST | `/sessions/:id/logout` | Confirm remote logout, then invalidate local auth |
-| DELETE | `/sessions/:id` | Stop/drain, delete local metadata/auth/events via cascade |
+| DELETE | `/sessions/:id` | Soft-delete with `isEnabled=false`, cancel retries and stop/drain the socket; retain metadata/auth/events |
 | GET | `/health` | Process uptime and aggregate session connection counts |
 
 Creation returns HTTP 201 with session ID, metadata and runtime. Pairing code
@@ -194,7 +200,8 @@ requests wait up to 60 seconds for socket readiness and can return 503 if not re
 Malformed bodies return 400, missing/invalid token 401, missing sessions 404,
 phone/operation conflicts 409, code rate limits 429, persistence failures 503, and unexpected internal failures 500.
 The requested phone is checked against the actual linked WhatsApp identity before
-CONNECTED is persisted. QR sessions without a phone record the linked phone.
+CONNECTED is persisted. New sessions require a phone for both QR and CODE;
+legacy QR sessions without a phone record the linked phone.
 
 ### Pairing Code example
 
@@ -243,12 +250,12 @@ Pairing code expiresAt is also an application bound, not a guarantee that WhatsA
 will accept the code until that exact instant. Codes/QRs are cleared on expiry,
 authentication and socket replacement; pairing material is never written to events.
 
-Switch an existing unregistered session without creating another socket:
+Select or renew QR pairing for an unregistered session; use `/pairing-code` to select CODE and receive its code:
 
 ```bash
-curl -X POST "$BASE_URL/sessions/SESSION_ID/pairing-method" \
+curl -X POST "$BASE_URL/sessions/SESSION_ID/qr" \
   -H "Authorization: Bearer $WA_ADMIN_API_KEY" \
-  -H 'Content-Type: application/json' -d '{"pairingMethod":"QR"}'
+  -H 'Content-Type: application/json' -d '{}'
 ```
 
 Normal reconnections restore persisted credentials. `restartRequired` after
@@ -258,10 +265,11 @@ must use `/reconnect`, rather than the pairing endpoints.
 ## Reconnection, restart and deletion
 
 Network failures retry independently per session with one timer, exponential
-backoff capped at 60 seconds and jitter in the upper half of the window. Retry
-counters reset after a stable connection, not immediately on every open event.
-`restartRequired` uses a short bounded delay. Logged-out, replaced, invalid-auth
-and expired-pairing sessions do not auto-retry. A known Baileys QR-exhaustion
+backoff capped at 60 seconds and jitter in the upper half of the window. There
+is no retry-attempt limit for temporary failures. Retry counters reset after a
+stable connection, not immediately on every open event. Only the first
+`restartRequired` is fast (250 ms); repeated protocol restarts use normal backoff.
+Logged-out, replaced, invalid-auth and expired-pairing sessions do not auto-retry. A known Baileys QR-exhaustion
 error is distinguished from a transient timeout; transient failures during initial
 pairing can reconnect too.
 
@@ -269,13 +277,18 @@ After SIGINT/SIGTERM, restart with the same MySQL database and admin config. The
 manager restores enabled eligible sessions in background with bounded concurrent
 initial handshakes and staggering. A previous database CONNECTED value does not
 prove the new process is connected: inspect `runtime.connected`.
+
+Enabled sessions marked FAILED solely by the old `Reconnect threshold reached`
+limit are eligible for restoration too. Other FAILED, LOGGED_OUT and EXPIRED
+sessions remain excluded.
+
 Shutdown stops new work, cancels timers, ends sockets **without logout**, and
 awaits queued authentication writes before Prisma disconnects. Watchdog checks use
 WebSocket readiness and Baileys keepalive, not the presence of incoming messages.
 An idle account is healthy. A failed auth write closes the session and reports a
 failure instead of continuing with potentially lost state.
 
-`/disconnect` persists `enabled=false`; it remains disconnected after restart.
+`/disconnect` persists `isEnabled=false`; it remains disconnected after restart.
 `/reconnect` enables it again. `/logout` requires a currently connected session;
 if remote logout cannot be confirmed, local credentials are retained and automatic
 reconnect is stopped. If WhatsApp already logged the account out, explicitly
@@ -283,11 +296,14 @@ selecting pairing again clears invalid credentials and starts fresh authenticati
 For badSession/forbidden/multideviceMismatch, only an explicit pairing action resets
 the known-invalid stored auth. Other errors never silently erase credentials.
 
-**Deletion policy:** DELETE removes the local session, credentials, keys and events
-after stopping/draining activity. It does not remotely unlink the WhatsApp device.
-If remote unlinking is desired, call `/logout` successfully before DELETE, or
-unlink the device from the WhatsApp phone. Cleanup/persistence failure prevents
-local deletion rather than racing outstanding writes.
+**Deletion policy:** DELETE returns HTTP 204 after persisting `isEnabled=false`,
+cancelling retries and stopping/draining the socket without remote logout. The
+session, credentials, keys and events remain stored. Disabled sessions stay visible
+in list/details and the test panel, and are not restored after process restart.
+Repeated DELETE requests are safe; an unknown session returns 404. Use the panel's
+reconnect action or `/reconnect` to resume with stored credentials. A logged-out
+session still requires explicit pairing. Socket/authentication cleanup failures
+return 503 while the session remains disabled.
 
 ## Validation and operations
 

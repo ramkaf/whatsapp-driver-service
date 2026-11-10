@@ -1,7 +1,12 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
 import { SessionRepository } from '../../sessions/session.repository.ts';
 import { normalizePhone } from '../../sessions/phone.ts';
+import { PairingMethodEnum } from '../../sessions/interfaces/session.interface.ts';
 
 export interface PairingCodeResponse {
   sessionId: string;
@@ -19,67 +24,80 @@ export class PairingService {
     { phone: string; promise: Promise<PairingCodeResponse> }
   >();
   constructor(
-    private readonly manager: SessionManagerService,
-    private readonly repository: SessionRepository,
+    private readonly sessionManagerService: SessionManagerService,
+    private readonly sessionRepository: SessionRepository,
   ) {}
-
-  async code(id: string, phone?: string): Promise<PairingCodeResponse> {
-    const row = await this.repository.require(id);
-    const number = phone ? normalizePhone(phone) : row.phone;
-    if (!number)
-      throw new BadRequestException(
-        'A phone number is required for pairing code',
-      );
-    const pending = this.requests.get(id);
-    if (pending) {
-      if (pending.phone !== number)
-        throw new BadRequestException(
-          'A request for another phone is in progress',
-        );
-      return pending.promise;
-    }
-    const request = (async (): Promise<PairingCodeResponse> => {
-      await this.manager.preparePairing(id, 'CODE', number);
-      const result = await this.manager.requestPairingCode(id, number);
-      return {
-        sessionId: id,
-        pairingMethod: 'CODE',
-        status: 'AWAITING_PAIRING',
-        ...result,
-      };
-    })();
-    this.requests.set(id, { phone: number, promise: request });
-    try {
-      return await request;
-    } finally {
-      if (this.requests.get(id)?.promise === request) this.requests.delete(id);
-    }
-  }
-
+  /** Starts or renews QR pairing without interrupting an in-flight code request. */
   async qr(id: string) {
-    const row = await this.repository.require(id);
+    const row = await this.sessionRepository.require(id);
     // Reading the endpoint never replaces or creates a socket.
     return {
       sessionId: id,
       pairingMethod: row.pairingMethod,
-      status: this.manager.snapshot(id).status,
-      ...this.manager.pairing(id),
+      status: this.sessionManagerService.snapshot(id).status,
+      ...this.sessionManagerService.pairing(id),
     };
   }
-
-  async select(id: string, method: 'CODE' | 'QR', phone?: string) {
+  async startQr(id: string) {
     if (this.requests.has(id))
       throw new BadRequestException('A pairing code request is in progress');
-    let number = phone !== undefined ? normalizePhone(phone) : undefined;
-    if (method === 'CODE' && !number) {
-      const row = await this.repository.require(id);
-      if (!row.phone)
-        throw new BadRequestException(
-          'A phone number is required for pairing code',
-        );
-      number = normalizePhone(row.phone);
-    }
-    await this.manager.preparePairing(id, method, number);
+    await this.sessionManagerService.preparePairing(id, PairingMethodEnum.QR);
     return this.qr(id);
+  }
+  async requestPairingCode(
+    id: string,
+    phone?: string,
+  ): Promise<PairingCodeResponse> {
+    const row = await this.sessionRepository.require(id);
+    const suppliedPhone = phone === undefined ? row.phone : phone;
+    if (!suppliedPhone) {
+      throw new BadRequestException(
+        'A phone number is required for pairing code',
+      );
+    }
+    const number = normalizePhone(suppliedPhone);
+    const existing = this.requests.get(id);
+
+    if (existing) {
+      if (existing.phone !== number) {
+        throw new ConflictException('Pairing request already in progress');
+      }
+      return existing.promise;
+    }
+    const request = this.executePairingCode(id, number);
+    this.requests.set(id, {
+      phone: number,
+      promise: request,
+    });
+
+    try {
+      return await request;
+    } finally {
+      if (this.requests.get(id)?.promise === request) {
+        this.requests.delete(id);
+      }
+    }
+  }
+  private async executePairingCode(
+    id: string,
+    number: string,
+  ): Promise<PairingCodeResponse> {
+    await this.sessionManagerService.preparePairing(
+      id,
+      PairingMethodEnum.CODE,
+      number,
+    );
+
+    const result = await this.sessionManagerService.requestPairingCode(
+      id,
+      number,
+    );
+
+    return {
+      sessionId: id,
+      pairingMethod: PairingMethodEnum.CODE,
+      status: 'AWAITING_PAIRING',
+      ...result,
+    };
   }
 }

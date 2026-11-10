@@ -1,13 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
-  IsIn,
+  IsEnum,
   IsNotEmpty,
   IsString,
   MaxLength,
   ValidateIf,
 } from 'class-validator';
 import { IsInternationalPhone } from '../phone.ts';
+import { PairingMethodEnum } from '../interfaces/session.interface.ts';
 
 export class CreateSessionDto {
   @ApiProperty({ example: 'WhatsApp 01', minLength: 1, maxLength: 100 })
@@ -20,27 +21,23 @@ export class CreateSessionDto {
   name: string;
 
   @ApiProperty({
-    enum: ['CODE', 'QR'],
+    enum: PairingMethodEnum,
     enumName: 'PairingMethod',
-    example: 'CODE',
+    example: PairingMethodEnum.CODE,
   })
-  @IsIn(['CODE', 'QR'])
-  pairingMethod: 'CODE' | 'QR';
+  @IsEnum(PairingMethodEnum)
+  pairingMethod: PairingMethodEnum;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '989121234567',
     maxLength: 30,
     description:
-      'Required for CODE, optional for QR. Valid international number with or without +.',
+      'Required for both QR and CODE. Valid international number with or without +.',
   })
-  @ValidateIf(
-    (dto: CreateSessionDto) =>
-      dto.phone !== undefined || dto.pairingMethod === 'CODE',
-  )
   @IsString()
   @MaxLength(30)
   @IsInternationalPhone()
-  phone?: string;
+  phone: string;
 }
 
 export class PairingCodeDto {
@@ -54,15 +51,5 @@ export class PairingCodeDto {
   @IsString()
   @MaxLength(30)
   @IsInternationalPhone()
-  phone?: string;
-}
-
-export class PairingMethodDto extends PairingCodeDto {
-  @ApiProperty({
-    enum: ['CODE', 'QR'],
-    enumName: 'PairingMethod',
-    example: 'CODE',
-  })
-  @IsIn(['CODE', 'QR'])
-  pairingMethod: 'CODE' | 'QR';
+  phone: string;
 }

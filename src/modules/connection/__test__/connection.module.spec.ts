@@ -1,3 +1,4 @@
+import { ConnectionMessageSource } from '../interfaces/message-event-source.ts';
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import type { Provider } from '@nestjs/common';
@@ -5,8 +6,6 @@ import { configuer } from '@libs/common';
 import { ConnectionModule } from '../connection.module.ts';
 import { SessionManagerService } from '../providers/session/session-manager.service.ts';
 import { RealtimeService } from '../providers/realtime/realtime.service.ts';
-import { ConnectionHandlerService } from '../providers/events/connection-handler.service.ts';
-import { DisconnectClassifierService } from '../providers/disconnect/disconnect-classifier.service.ts';
 import { AuthStateService } from '../../auth-state/providers/auth-state.service.ts';
 import { SessionRepository } from '../../sessions/session.repository.ts';
 
@@ -19,7 +18,7 @@ describe('ConnectionModule', () => {
     const module = await Test.createTestingModule({
       providers: [
         ...providers,
-        { provide: configuer.KEY, useValue: { whatsapp: { maxRetries: 3 } } },
+        { provide: configuer.KEY, useValue: { whatsapp: {} } },
         { provide: AuthStateService, useValue: {} },
         { provide: SessionRepository, useValue: {} },
       ],
@@ -29,13 +28,10 @@ describe('ConnectionModule', () => {
         SessionManagerService,
       );
       expect(module.get(RealtimeService)).toBeInstanceOf(RealtimeService);
-      expect(
-        module.get(ConnectionHandlerService).process({ connection: 'close' })
-          .disconnect,
-      ).toEqual(module.get(DisconnectClassifierService).classify(undefined));
       expect(Reflect.getMetadata('exports', ConnectionModule)).toEqual([
         SessionManagerService,
         RealtimeService,
+        ConnectionMessageSource,
       ]);
     } finally {
       await module.close();

@@ -8,5 +8,11 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/__test__/**/*.spec.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts', 'libs/**/*.ts'],
+      exclude: ['**/__test__/**', '**/generated/**', '**/*.d.ts'],
+      reporter: ['text', 'json-summary', 'html'],
+    },
   },
 });

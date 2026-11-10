@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 import { SessionRepository } from '../session.repository.ts';
@@ -11,58 +11,50 @@ import { normalizePhone } from '../phone.ts';
 @Injectable()
 export class SessionsService {
   private readonly creation = new SessionQueue();
-  private readonly logger = new Logger(SessionsService.name);
 
   constructor(
-    private readonly repository: SessionRepository,
-    private readonly manager: SessionManagerService,
+    private readonly sessionRepository: SessionRepository,
+    private readonly sessionManagerService: SessionManagerService,
     @Inject(configuer.KEY) private readonly config: IAppConfig,
   ) {}
 
   async create(dto: CreateSessionDto) {
     return this.creation.run('create', async () => {
-      if ((await this.repository.count()) >= this.config.whatsapp.maxSessions)
-        throw new ConflictException('Session limit reached');
-      const row = await this.repository.create({
-        name: dto.name,
-        pairingMethod: dto.pairingMethod,
-        phone: dto.phone ? normalizePhone(dto.phone) : undefined,
-      });
-      try {
-        await this.manager.start(row.id);
-      } catch {
-        this.logger.warn({
-          sessionId: row.id,
-          event: 'initial_connection_failed',
-        });
-      }
+      const row = await this.sessionManagerService.replace(
+        {
+          name: dto.name,
+          pairingMethod: dto.pairingMethod,
+          phone: normalizePhone(dto.phone),
+        },
+        this.config.whatsapp.maxSessions,
+      );
       return this.details(row.id);
     });
   }
   async list() {
-    const rows = await this.repository.list();
+    const rows = await this.sessionRepository.list();
     return rows.map((row) => ({
       ...row,
-      runtime: this.manager.snapshot(row.id),
+      runtime: this.sessionManagerService.snapshot(row.id),
     }));
   }
   async details(id: string) {
-    const row = await this.repository.require(id);
-    return { ...row, runtime: this.manager.snapshot(id) };
+    const row = await this.sessionRepository.require(id);
+    return { ...row, runtime: this.sessionManagerService.snapshot(id) };
   }
   async reconnect(id: string) {
-    await this.manager.restart(id);
+    await this.sessionManagerService.restart(id);
     return this.details(id);
   }
   async disconnect(id: string) {
-    await this.manager.stop(id);
+    await this.sessionManagerService.stop(id);
     return this.details(id);
   }
   async logout(id: string) {
-    await this.manager.logout(id);
+    await this.sessionManagerService.logout(id);
     return this.details(id);
   }
   async remove(id: string) {
-    await this.manager.remove(id);
+    await this.sessionManagerService.remove(id);
   }
 }

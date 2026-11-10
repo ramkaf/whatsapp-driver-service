@@ -1,4 +1,4 @@
-import { DisconnectClassifierService } from './providers/disconnect/disconnect-classifier.service.ts';
+import { ConnectionMessageSource } from './interfaces/message-event-source.ts';
 import { SessionRuntimeService } from './providers/session/session-runtime.service.ts';
 import { SocketLifecycleService } from './providers/socket/socket-lifecycle.service.ts';
 import { SocketEventRegistrarService } from './providers/socket/socket-event-registrar.service.ts';
@@ -9,22 +9,23 @@ import { SessionDataModule } from '../sessions/session-data.module.ts';
 import { SessionManagerService } from './providers/session/session-manager.service.ts';
 import { SocketFactoryService } from './providers/socket/socket-factory.service.ts';
 import { ConnectionSupervisorService } from './providers/recovery/connection-supervisor.service.ts';
-import { ConnectionHandlerService } from './providers/events/connection-handler.service.ts';
 
 // Wires session orchestration, socket infrastructure, recovery, and realtime providers.
 @Module({
   imports: [AuthStateModule, SessionDataModule],
   providers: [
-    DisconnectClassifierService,
     SessionRuntimeService,
     SocketLifecycleService,
     SocketEventRegistrarService,
+    {
+      provide: ConnectionMessageSource,
+      useExisting: SocketEventRegistrarService,
+    },
     RealtimeService,
     SessionManagerService,
     SocketFactoryService,
     ConnectionSupervisorService,
-    ConnectionHandlerService,
   ],
-  exports: [SessionManagerService, RealtimeService],
+  exports: [SessionManagerService, RealtimeService, ConnectionMessageSource],
 })
 export class ConnectionModule {}
