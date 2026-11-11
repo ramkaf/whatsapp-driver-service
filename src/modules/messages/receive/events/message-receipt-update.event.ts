@@ -16,7 +16,5 @@ export class MessageReceiptUpdateEventHandler extends MessageEventHandler<'messa
 
   async handle(
     event: ConnectionMessageEvent<'message-receipt.update'>,
-  ): Promise<void> {
-    
-  }
+  ): Promise<void> {}
 }

@@ -1,5 +1,5 @@
 import { HashUtil } from '@libs/common/helper/hash.util.js';
-import type { Prisma } from '@libs/common/prisma/src/index.js';
+import type { Prisma } from '@database/client.js';
 import { BufferJSON, proto } from '@whiskeysockets/baileys';
 import type { WAMessage } from '@whiskeysockets/baileys';
 

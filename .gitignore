@@ -2,7 +2,7 @@
 /dist
 /node_modules
 /build
-/libs/prisma/src/generated/
+/prisma/generated/
 
 # TypeScript build cache
 *.tsbuildinfo

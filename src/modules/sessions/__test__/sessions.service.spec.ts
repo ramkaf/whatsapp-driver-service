@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SessionsService } from '../providers/sessions.service.ts';
 import type { IAppConfig } from '@libs/common';
-import type { SessionRepository } from '../session.repository.ts';
+import type { IWaSessionRepository } from '@libs/prisma';
 import type { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
 import { PairingMethodEnum } from '../interfaces/session.interface.ts';
 
@@ -23,7 +23,7 @@ function fixture(max = 50) {
     repository,
     manager,
     service: new SessionsService(
-      repository as unknown as SessionRepository,
+      repository as unknown as IWaSessionRepository,
       manager as unknown as SessionManagerService,
       { whatsapp: { maxSessions: max } } as IAppConfig,
     ),

@@ -18,7 +18,6 @@ export class MessagesUpdateEventHandler extends MessageEventHandler<'messages.up
     event: ConnectionMessageEvent<'messages.update'>,
   ): Promise<void> {
     for (const update of event.data) {
-      
     }
   }
 }

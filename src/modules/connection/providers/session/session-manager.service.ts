@@ -30,9 +30,9 @@ import type {
   PairingQr,
   SessionSnapshot,
 } from '../../interfaces/session-results.ts';
-import type { WaSession } from '@libs/prisma';
+import type { WaSession } from '@database/client.js';
 import { AuthStateService } from '../../../auth-state/providers/auth-state.service.ts';
-import { SessionRepository } from '../../../sessions/session.repository.ts';
+import { WA_SESSION_REPOSITORY } from '@libs/prisma';
 import { SocketFactoryService } from '../socket/socket-factory.service.ts';
 import { ConnectionSupervisorService } from '../recovery/connection-supervisor.service.ts';
 import { SessionQueue } from '../../session-queue.ts';
@@ -57,7 +57,8 @@ export class SessionManagerService
   private readonly startupAbort = new AbortController();
 
   constructor(
-    @Inject(SessionRepository) private readonly repository: SessionPersistence,
+    @Inject(WA_SESSION_REPOSITORY)
+    private readonly repository: SessionPersistence,
     @Inject(AuthStateService) private readonly authStore: SessionAuthentication,
     @Inject(SocketFactoryService)
     private readonly factory: SessionSocketFactory,
@@ -208,7 +209,10 @@ export class SessionManagerService
         throw new ConflictException('Pairing is required after logout');
       const runtime = this.runtime(row);
       if (manual) {
-        await this.repository.update(id, { isEnabled: true, retryCount: 0 });
+        await this.repository.updateCurrent(id, {
+          isEnabled: true,
+          retryCount: 0,
+        });
         runtime.retryCount = 0;
         runtime.intentionalStop = false;
       }
@@ -357,7 +361,7 @@ export class SessionManagerService
         expiresAt: Date.now() + this.config.whatsapp.pairingTtlMs,
       };
       this.runtimeState.state(runtime, 'AWAITING_PAIRING');
-      await this.repository.update(runtime.sessionId, {
+      await this.repository.updateCurrent(runtime.sessionId, {
         status: 'AWAITING_PAIRING',
       });
     }
@@ -506,7 +510,10 @@ export class SessionManagerService
       if (row.status === 'LOGGED_OUT')
         throw new ConflictException('Pairing is required after logout');
       const runtime = this.runtime(row);
-      await this.repository.update(id, { isEnabled: true, retryCount: 0 });
+      await this.repository.updateCurrent(id, {
+        isEnabled: true,
+        retryCount: 0,
+      });
       this.runtimeState.recordDisconnect(
         runtime,
         CONNECTION_REASONS.MANUAL_RESTART,
@@ -579,7 +586,7 @@ export class SessionManagerService
           'Connect the session before requesting remote logout',
         );
       }
-      await this.repository.update(id, { isEnabled: false });
+      await this.repository.updateCurrent(id, { isEnabled: false });
       runtime.intentionalStop = true;
       this.lifecycle.cancelRetry(runtime);
       try {
@@ -653,7 +660,7 @@ export class SessionManagerService
       }
       if (phone && row.phone && row.phone !== phone)
         throw new ConflictException('Session phone cannot be changed');
-      await this.repository.update(id, {
+      await this.repository.updateCurrent(id, {
         pairingMethod: method,
         ...(phone ? { phone } : {}),
         isEnabled: true,
@@ -758,7 +765,7 @@ export class SessionManagerService
               now - runtime.connectedAt >=
                 this.config.whatsapp.stableConnectionMs
             ) {
-              await this.repository.update(runtime.sessionId, {
+              await this.repository.updateCurrent(runtime.sessionId, {
                 retryCount: 0,
                 lastHeartbeatAt: new Date(),
               });

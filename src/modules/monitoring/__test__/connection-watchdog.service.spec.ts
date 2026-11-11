@@ -47,12 +47,14 @@ describe('ConnectionWatchdogService', () => {
   });
 
   it('contains a failed inspection and checks again at the next interval', async () => {
-    inspect.mockRejectedValueOnce(new Error('persistence unavailable'));
+    const failure = new Error('persistence unavailable');
+    inspect.mockRejectedValueOnce(failure);
     watchdog.onApplicationBootstrap();
     await vi.advanceTimersByTimeAsync(2_000);
     expect(inspect).toHaveBeenCalledTimes(2);
     expect(loggedError).toHaveBeenCalledWith({
       event: 'watchdog_check_failed',
+      error: failure,
     });
   });
 

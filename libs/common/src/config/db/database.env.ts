@@ -5,6 +5,7 @@ export interface DatabaseConfig {
   password: string;
   database: string;
   connectionLimit: number;
+  allowPublicKeyRetrieval: boolean;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -30,6 +31,13 @@ function positiveInteger(raw: string, key: string, max: number): number {
 export function readDatabaseConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): DatabaseConfig {
+  const allowPublicKeyRetrieval = env.DB_ALLOW_PUBLIC_KEY_RETRIEVAL ?? 'false';
+  if (!['true', 'false'].includes(allowPublicKeyRetrieval)) {
+    throw new Error(
+      'Invalid environment variable: DB_ALLOW_PUBLIC_KEY_RETRIEVAL',
+    );
+  }
+
   return {
     host: required(env, 'DB_HOST'),
     port: positiveInteger(required(env, 'DB_PORT'), 'DB_PORT', 65535),
@@ -41,6 +49,7 @@ export function readDatabaseConfig(
       'DB_CONNECTION_LIMIT',
       1000,
     ),
+    allowPublicKeyRetrieval: allowPublicKeyRetrieval === 'true',
   };
 }
 

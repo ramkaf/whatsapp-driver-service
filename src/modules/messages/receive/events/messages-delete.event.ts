@@ -17,7 +17,5 @@ export class MessagesDeleteEventHandler extends MessageEventHandler<'messages.de
 
   async handle(
     event: ConnectionMessageEvent<'messages.delete'>,
-  ): Promise<void> {
-
-  }
+  ): Promise<void> {}
 }

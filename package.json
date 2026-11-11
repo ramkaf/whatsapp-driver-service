@@ -12,12 +12,11 @@
   "scripts": {
     "up": "docker compose up -d --build",
     "down": "docker compose down",
-    "build": "pnpm run prisma:generate && nest build",
     "deploy": "nest deploy",
     "format": "prettier --write \"src/**/*.ts\" \"libs/**/*.ts\"",
-    "start": "pnpm run prisma:generate && nest start",
-    "start:dev": "pnpm run prisma:generate && nest start --watch",
-    "start:debug": "pnpm run prisma:generate && nest start --debug --watch",
+    "start": "pnpm run db:generate && nest start",
+    "start:dev": "pnpm run db:generate && nest start --watch",
+    "start:debug": "pnpm run db:generate && nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "oxlint --type-aware src/ libs/",
     "test": "vitest run",
@@ -35,7 +34,10 @@
     "db:format": "prisma format",
     "db:studio": "prisma studio",
     "db:pull": "prisma db pull && prisma generate",
-    "db-pull": "pnpm run db:pull"
+    "db-pull": "pnpm run db:pull",
+    "db:migrate:create": "prisma migrate dev --create-only",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev"
   },
   "dependencies": {
     "@afra/exchange-logger": "^3.0.5",

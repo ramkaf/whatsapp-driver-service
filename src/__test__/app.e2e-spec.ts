@@ -4,10 +4,13 @@ import { HttpException, NotFoundException } from '@nestjs/common';
 import request from 'supertest';
 import { vi } from 'vitest';
 import { AppModule } from '../app.module.ts';
-import { PrismaService } from '@libs/prisma';
-import { configuer, RedisService, EEnvironment } from '@libs/common';
+import { PrismaService, WA_SESSION_REPOSITORY } from '@libs/prisma';
+import {
+  configuer,
+  RabbitMQService,
+  EEnvironment,
+} from '@libs/common';
 import type { IAppConfig } from '@libs/common';
-import { SessionRepository } from '../modules/sessions/session.repository.ts';
 import { SessionManagerService } from '../modules/connection/providers/session/session-manager.service.ts';
 import { PersistenceFilter } from '../modules/sessions/filters/persistence.filter.ts';
 import { MinioStorageService } from '../modules/media/providers/minio-storage.service.ts';
@@ -92,9 +95,9 @@ describe('Session administration API (e2e, external services mocked)', () => {
       .useValue(config)
       .overrideProvider(PrismaService)
       .useValue({})
-      .overrideProvider(RedisService)
-      .useValue({ client: {} })
-      .overrideProvider(SessionRepository)
+      .overrideProvider(RabbitMQService)
+      .useValue({})
+      .overrideProvider(WA_SESSION_REPOSITORY)
       .useValue(repository)
       .overrideProvider(SessionManagerService)
       .useValue(manager)

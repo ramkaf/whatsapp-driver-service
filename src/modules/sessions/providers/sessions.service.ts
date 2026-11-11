@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
-import { SessionRepository } from '../session.repository.ts';
+import { WA_SESSION_REPOSITORY, type IWaSessionRepository } from '@libs/prisma';
 import { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
 import { SessionQueue } from '../../connection/session-queue.ts';
 import type { CreateSessionDto } from '../dto/sessions.dto.ts';
@@ -13,7 +13,8 @@ export class SessionsService {
   private readonly creation = new SessionQueue();
 
   constructor(
-    private readonly sessionRepository: SessionRepository,
+    @Inject(WA_SESSION_REPOSITORY)
+    private readonly sessionRepository: IWaSessionRepository,
     private readonly sessionManagerService: SessionManagerService,
     @Inject(configuer.KEY) private readonly config: IAppConfig,
   ) {}

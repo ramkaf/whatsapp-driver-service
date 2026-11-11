@@ -1,13 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@libs/common/prisma/index.js';
-import type { Prisma } from '@libs/common/prisma/src/index.js';
 import { ConnectionMessageSource } from '../../connection/interfaces/message-event-source.ts';
 import { MediaService } from './media.service.ts';
+import { deserializeInboxMessage } from '../../inbox/utils/inbox.util.ts';
+import { INBOX_REPOSITORY, InboxRepository } from '@libs/prisma';
 import {
   WhatsappMessageInboxStatus,
   WhatsappMessageMediaStatus,
-} from '@libs/common/prisma/src/generated/enums.js';
-import { deserializeInboxMessage } from '../../inbox/utils/inbox.util.ts';
+} from '@database/enums.js';
+import { Prisma } from '@database/client.js';
 
 @Injectable()
 export class MediaProcessorService {
@@ -17,15 +17,16 @@ export class MediaProcessorService {
   private readonly retryDelayMs = 30_000;
 
   constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MediaService) private readonly mediaService: MediaService,
     @Inject(ConnectionMessageSource)
     private readonly source: ConnectionMessageSource,
+    @Inject(INBOX_REPOSITORY)
+    private readonly inboxRepository: InboxRepository,
   ) {}
 
   /** Processes a bounded batch, allowing other records to finish if one fails. */
   async processPending(): Promise<void> {
-    const records = await this.prisma.whatsappMessageInbox.findMany({
+    const records = await this.inboxRepository.findMany({
       where: this.eligibleMedia(),
       select: { id: true },
       orderBy: {
@@ -54,7 +55,7 @@ export class MediaProcessorService {
 
   async processOne(id: string): Promise<void> {
     // Only the worker that changes this row may start the download.
-    const claimed = await this.prisma.whatsappMessageInbox.updateMany({
+    const claimed = await this.inboxRepository.updateMany({
       where: {
         id,
         ...this.eligibleMedia(),
@@ -67,7 +68,7 @@ export class MediaProcessorService {
     if (claimed.count === 0) return;
 
     try {
-      const record = await this.prisma.whatsappMessageInbox.findUniqueOrThrow({
+      const record = await this.inboxRepository.findUniqueOrThrow({
         where: { id },
       });
       const message = deserializeInboxMessage(record.payload);
@@ -83,7 +84,7 @@ export class MediaProcessorService {
         throw new Error('Media upload did not return an object key');
       }
 
-      const completed = await this.prisma.whatsappMessageInbox.updateMany({
+      const completed = await this.inboxRepository.updateMany({
         where: {
           id,
           mediaStatus: WhatsappMessageMediaStatus.PROCESSING,
@@ -113,7 +114,7 @@ export class MediaProcessorService {
       error instanceof Error ? error.stack : undefined,
     );
 
-    await this.prisma.whatsappMessageInbox.updateMany({
+    await this.inboxRepository.updateMany({
       where: {
         id,
         mediaStatus: WhatsappMessageMediaStatus.PROCESSING,

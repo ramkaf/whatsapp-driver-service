@@ -18,8 +18,7 @@ export class MessagesReactionEventHandler extends MessageEventHandler<'messages.
   async handle(
     event: ConnectionMessageEvent<'messages.reaction'>,
   ): Promise<void> {
-    for (const reaction of event.data){
-      
+    for (const reaction of event.data) {
+    }
   }
-}
 }

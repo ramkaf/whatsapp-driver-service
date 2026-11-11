@@ -1,5 +1,5 @@
 import { BufferJSON } from '@whiskeysockets/baileys';
-import { Prisma } from '@libs/prisma';
+import { Prisma } from '@database/client.js';
 
 export class AuthStateSerializer {
   static encode(value: unknown): Prisma.InputJsonValue {

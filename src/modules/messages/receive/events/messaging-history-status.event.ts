@@ -15,7 +15,5 @@ export class MessagingHistoryStatusEventHandler extends MessageEventHandler<'mes
   }
   async handle(
     event: ConnectionMessageEvent<'messaging-history.status'>,
-  ): Promise<void> {
-   
-  }
+  ): Promise<void> {}
 }

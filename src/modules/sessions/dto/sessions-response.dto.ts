@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { WaSessionStatus } from '@libs/prisma';
 import { CONNECTION_REASONS } from '../../connection/interfaces/connection-status.ts';
 import { PairingMethodEnum } from '../interfaces/session.interface.ts';
+import { WaSessionStatus } from '@database/enums.js';
 
 export class RuntimeStatusDto {
   @ApiProperty({

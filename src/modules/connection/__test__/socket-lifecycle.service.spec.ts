@@ -1,4 +1,4 @@
-import type { WaSession } from '@libs/prisma';
+import type { WaSession } from '@database/client.js';
 import type { WASocket } from '@whiskeysockets/baileys';
 import type { AuthContext } from '../../auth-state/context/auth-state.context.ts';
 import { SessionRuntimeService } from '../providers/session/session-runtime.service.ts';

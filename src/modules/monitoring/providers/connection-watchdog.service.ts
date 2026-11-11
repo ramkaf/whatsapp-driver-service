@@ -22,7 +22,9 @@ export class ConnectionWatchdogService
       if (this.checking) return;
       this.checking = this.manager
         .inspectConnections()
-        .catch(() => this.logger.error({ event: 'watchdog_check_failed' }))
+        .catch((error) =>
+          this.logger.error({ event: 'watchdog_check_failed', error }),
+        )
         .finally(() => {
           this.checking = null;
         });

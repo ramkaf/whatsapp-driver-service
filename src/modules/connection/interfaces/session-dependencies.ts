@@ -1,11 +1,11 @@
 import type { AuthStateService } from '../../auth-state/providers/auth-state.service.ts';
-import type { SessionRepository } from '../../sessions/session.repository.ts';
+import type { IWaSessionRepository } from '@libs/prisma';
 import type { SocketFactoryService } from '../providers/socket/socket-factory.service.ts';
 
 export interface SessionPersistence extends Pick<
-  SessionRepository,
+  IWaSessionRepository,
   | 'require'
-  | 'update'
+  | 'updateCurrent'
   | 'transition'
   | 'recoverable'
   | 'remove'

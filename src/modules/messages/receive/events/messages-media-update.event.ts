@@ -18,8 +18,7 @@ export class MessagesMediaUpdateEventHandler extends MessageEventHandler<'messag
   async handle(
     event: ConnectionMessageEvent<'messages.media-update'>,
   ): Promise<void> {
-    for (const update of event.data){
-
+    for (const update of event.data) {
+    }
   }
-}
 }

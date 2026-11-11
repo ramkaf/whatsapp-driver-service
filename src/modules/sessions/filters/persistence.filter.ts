@@ -1,3 +1,4 @@
+import { Prisma } from '@database/client.js';
 import {
   ArgumentsHost,
   Catch,
@@ -6,7 +7,6 @@ import {
   HttpException,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { Prisma } from '@libs/prisma';
 
 @Catch()
 export class PersistenceFilter implements ExceptionFilter {

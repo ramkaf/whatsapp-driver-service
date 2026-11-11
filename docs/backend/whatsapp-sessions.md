@@ -40,8 +40,9 @@ Existing scaffold files under `src/modules/` are implemented in place:
 - `pairing/pairing/pairing.service.ts`: CODE/QR workflows, phone validation and
   single-flight code requests. QR reads do not restart sockets.
 - `sessions/sessions/*`: validated REST controller and application operations.
-- `sessions/session.repository.ts` and `session-data.module.ts`: shared session
-  metadata/event persistence; no feature module creates another Prisma client.
+- `libs/prisma/src/repositories/wa-session/wa-session.repository.ts`: shared
+  session metadata/event persistence, exposed to feature modules through
+  `sessions/session-data.module.ts` using `WA_SESSION_REPOSITORY`.
 - `sessions/admin.guard.ts`: constant-time Bearer key validation and no-store headers.
 - `sessions/persistence.filter.ts`: safe HTTP error responses without DB/auth details.
 - `monitoring/*`: bounded watchdog checks and aggregated health.

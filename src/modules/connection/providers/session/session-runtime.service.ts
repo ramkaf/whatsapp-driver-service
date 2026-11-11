@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { WaSession } from '@libs/prisma';
+import type { WaSession } from '@database/client.js';
 import type { SessionRuntime } from '../../interfaces/session-runtime.ts';
 import type {
   PairingQr,

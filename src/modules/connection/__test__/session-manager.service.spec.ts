@@ -18,7 +18,7 @@ import type {
   ConnectionState,
 } from '@whiskeysockets/baileys';
 import type { IAppConfig } from '@libs/common';
-import type { WaSession } from '@libs/prisma';
+import type { WaSession } from '@database/client.js';
 import { SessionManagerService } from '../providers/session/session-manager.service.ts';
 import { ConnectionSupervisorService } from '../providers/recovery/connection-supervisor.service.ts';
 import type { AuthContext } from '../../auth-state/context/auth-state.context.ts';
@@ -97,7 +97,7 @@ describe('SessionManagerService', () => {
   let authenticated: Set<string>;
   let repository: {
     require: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
+    updateCurrent: ReturnType<typeof vi.fn>;
     transition: ReturnType<typeof vi.fn>;
     recoverable: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
@@ -176,7 +176,7 @@ describe('SessionManagerService', () => {
           return next;
         },
       ),
-      update,
+      updateCurrent: update,
       transition: vi.fn(async (id: string, data: Partial<WaSession>) =>
         update(id, data),
       ),
@@ -1348,10 +1348,10 @@ describe('SessionManagerService', () => {
     expect(manager.snapshot('one').retryCount).toBe(2);
     await vi.advanceTimersByTimeAsync(config.whatsapp.stableConnectionMs);
     await manager.inspectConnections();
-    repository.update.mockClear();
+    repository.updateCurrent.mockClear();
     await manager.inspectConnections();
     expect(manager.snapshot('one').retryCount).toBe(0);
-    expect(repository.update).not.toHaveBeenCalled();
+    expect(repository.updateCurrent).not.toHaveBeenCalled();
   });
 
   it('does not create a socket if shutdown begins during a manual start database write', async () => {
@@ -1359,7 +1359,7 @@ describe('SessionManagerService', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    repository.update.mockImplementationOnce(async () => {
+    repository.updateCurrent.mockImplementationOnce(async () => {
       await gate;
       return rows.get('one');
     });

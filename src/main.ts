@@ -1,19 +1,18 @@
 import { configuer } from '@libs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module.ts';
+import { AppModule } from './app.module.js';
 import type { IAppConfig } from '../libs/common/src/config/index.ts';
 import { PersistenceFilter } from './modules/sessions/filters/persistence.filter.ts';
 import { setupSwagger } from './swagger/setup-swagger.ts';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { RealtimeService } from './modules/connection/providers/realtime/realtime.service.ts';
 import { SessionManagerService } from './modules/connection/providers/session/session-manager.service.ts';
-import { SessionRepository } from './modules/sessions/session.repository.ts';
+import { WA_SESSION_REPOSITORY, type IWaSessionRepository } from '@libs/prisma';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: new Logger(),
   });
-  app.enableShutdownHooks();
   const config = app.get<IAppConfig>(configuer.KEY);
   app.enableShutdownHooks();
   app.useGlobalPipes(
@@ -31,7 +30,7 @@ async function bootstrap() {
 
   setupSwagger(app);
   const manager = app.get(SessionManagerService);
-  const repository = app.get(SessionRepository);
+  const repository = app.get<IWaSessionRepository>(WA_SESSION_REPOSITORY);
   app.get(RealtimeService).attach(app.getHttpServer(), {
     exists: async (id) => {
       await repository.require(id);

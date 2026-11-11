@@ -1,26 +1,30 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { WAMessage } from '@whiskeysockets/baileys';
-import { PrismaService } from '@libs/common/prisma/index.js';
-import { Prisma } from '@libs/common/prisma/src/index.js';
+import type { WAMessage } from '@whiskeysockets/baileys';
+import { INBOX_REPOSITORY, type IInboxRepository } from '@libs/prisma';
+import type { Prisma } from '@database/client.js';
 import { MediaDetectorUtil } from '../utils/media-detactor.utils.ts';
 import {
   WhatsappMessageInboxStatus,
   WhatsappMessageMediaStatus,
-} from '@libs/common/prisma/src/generated/enums.js';
+} from '@database/enums.js';
 import { generateMessageFingerprint } from '../utils/inbox.util.ts';
 
 @Injectable()
 export class InboxService {
   private readonly logger = new Logger(InboxService.name);
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(INBOX_REPOSITORY)
+    private readonly inboxRepository: IInboxRepository,
+  ) {}
 
   async handle(message: WAMessage, sessionId: string): Promise<void> {
-    this.logger.log({ event: 'inbox_message_received', message });
     try {
       const hasMedia = MediaDetectorUtil.hasMedia(message);
       const remoteJid = message.key.remoteJid;
       const messageId = message.key.id;
       const fromMe = message.key.fromMe;
+      const phone = message.key.participantAlt;
+      const messageText = message.message?.conversation ?? 'unknown';
 
       if (!remoteJid || !messageId || fromMe) return;
 
@@ -28,7 +32,25 @@ export class InboxService {
       const payload = JSON.parse(
         JSON.stringify(message),
       ) as Prisma.InputJsonValue;
-      await this.prisma.whatsappMessageInbox.upsert({
+      // await this.inboxRepository.createMany({
+      //   data: [
+      //     {
+      //       key,
+      //       payload,
+      //       haveMedia: hasMedia,
+      //       mediaStatus: hasMedia
+      //         ? WhatsappMessageMediaStatus.PENDING
+      //         : WhatsappMessageMediaStatus.NOT_REQUIRED,
+      //       status: hasMedia
+      //         ? WhatsappMessageInboxStatus.RECEIVED
+      //         : WhatsappMessageInboxStatus.READY,
+      //       sessionId,
+      //       willBeDeleteColumn: `${phone}`
+      //     },
+      //   ],
+      //   skipDuplicates: true,
+      // });
+      await this.inboxRepository.upsert({
         where: { key },
         create: {
           key,
@@ -37,11 +59,11 @@ export class InboxService {
           mediaStatus: hasMedia
             ? WhatsappMessageMediaStatus.PENDING
             : WhatsappMessageMediaStatus.NOT_REQUIRED,
-
           status: hasMedia
             ? WhatsappMessageInboxStatus.RECEIVED
             : WhatsappMessageInboxStatus.READY,
           sessionId,
+          temp: `${phone}:${messageText}`,
         },
         update: {},
       });

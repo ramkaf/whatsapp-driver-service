@@ -1,10 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
 } from '@nestjs/common';
 import { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
-import { SessionRepository } from '../../sessions/session.repository.ts';
+import { WA_SESSION_REPOSITORY, type IWaSessionRepository } from '@libs/prisma';
 import { normalizePhone } from '../../sessions/phone.ts';
 import { PairingMethodEnum } from '../../sessions/interfaces/session.interface.ts';
 
@@ -25,7 +26,8 @@ export class PairingService {
   >();
   constructor(
     private readonly sessionManagerService: SessionManagerService,
-    private readonly sessionRepository: SessionRepository,
+    @Inject(WA_SESSION_REPOSITORY)
+    private readonly sessionRepository: IWaSessionRepository,
   ) {}
   /** Starts or renews QR pairing without interrupting an in-flight code request. */
   async qr(id: string) {

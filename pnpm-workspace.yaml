@@ -1,3 +1,6 @@
 allowBuilds:
   '@prisma/engines': false
+  '@scarf/scarf': set this to true or false
+  '@whiskeysockets/baileys': set this to true or false
   prisma: false
+  protobufjs: set this to true or false

@@ -1,6 +1,6 @@
 import type { PairingSecret } from './session-results.ts';
 import type { WASocket } from '@whiskeysockets/baileys';
-import type { WaSessionStatus } from '@libs/prisma';
+import type { WaSessionStatus } from '@database/client.js';
 import type { AuthContext } from '../../auth-state/context/auth-state.context.ts';
 import type { CONNECTION_REASONS } from './connection-status.ts';
 import { PairingMethodEnum } from '../../sessions/interfaces/session.interface.ts';

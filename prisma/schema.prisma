@@ -10,3 +10,157 @@ generator client {
 datasource db {
   provider = "mysql"
 }
+
+
+enum WaSessionStatus {
+  DISCONNECTED
+  CONNECTING
+  AWAITING_PAIRING
+  CONNECTED
+  LOGGED_OUT
+  RECONNECTING
+  FAILED
+  EXPIRED
+  AUTHENTICATING
+}
+
+enum WaPairingMethod {
+  CODE
+  QR
+}
+
+enum WaSessionEventType {
+  SESSION_CREATED
+  CONNECTION_STARTED
+  CONNECTION_OPENED
+  CONNECTION_CLOSED
+  CONNECTION_REPLACED
+  PAIRING_CODE_REQUESTED
+  PAIRING_COMPLETED
+  PAIRING_EXPIRED
+  RECONNECT_SCHEDULED
+  AUTH_UPDATED
+  ERROR
+}
+
+model WaSession {
+  id                 String           @id @default(cuid()) @db.VarChar(30)
+  name               String           @db.VarChar(100)
+  pairingMethod      WaPairingMethod  @default(QR) @map("pairing_method")
+  phone              String           @db.VarChar(20)
+  supersededAt       DateTime?        @map("superseded_at") @db.DateTime(3)
+  status             WaSessionStatus  @default(DISCONNECTED)
+  retryCount         Int              @default(0) @map("retry_count")
+  lastConnectedAt    DateTime?        @map("last_connected_at") @db.DateTime(3)
+  lastDisconnectedAt DateTime?        @map("last_disconnected_at") @db.DateTime(3)
+  lastDisconnectCode Int?             @map("last_disconnect_code")
+  lastError          String?          @map("last_error") @db.Text
+  lastHeartbeatAt    DateTime?        @map("last_heartbeat_at") @db.DateTime(3)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  authCreds          WaAuthCreds?
+  authKeys           WaAuthKey[]
+  events             WaSessionEvent[]
+  isEnabled          Boolean          @default(true)
+
+  @@index([status, lastHeartbeatAt])
+  @@index([phone, supersededAt])
+  @@map("wa_sessions")
+}
+
+model WaAuthCreds {
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  sessionId String    @unique @map("session_id") @db.VarChar(30)
+  creds     Json
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  session   WaSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("wa_auth_creds")
+}
+
+model WaAuthKey {
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  sessionId String    @map("session_id") @db.VarChar(30)
+  type      String    @db.VarChar(100)
+  keyId     String    @map("key_id") @db.VarChar(255)
+  value     Json
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+  session   WaSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, type, keyId])
+  @@map("wa_auth_keys")
+}
+
+model WaSessionEvent {
+  id         String             @id @default(cuid()) @db.VarChar(30)
+  sessionId  String             @map("session_id") @db.VarChar(30)
+  event      WaSessionEventType
+  statusCode Int?               @map("status_code")
+  message    String?            @db.Text
+  metadata   Json?
+  createdAt  DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  session    WaSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("wa_session_events")
+}
+
+enum WhatsappMessageInboxStatus {
+  RECEIVED
+  READY
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum WhatsappMessageMediaStatus {
+  NOT_REQUIRED
+  PENDING
+  PROCESSING
+  UPLOADED
+  FAILED
+}
+
+model WhatsappMessageInbox {
+  id              String                    @id @default(cuid())
+  key             String                    @unique @db.VarChar(191)
+  payload         Json
+  haveMedia       Boolean                   @default(false)
+  mediaStatus     WhatsappMessageMediaStatus @default(NOT_REQUIRED)
+  mediaObjectKey  String?                   @db.VarChar(1024)
+  mediaMimeType   String?                   @db.VarChar(150)
+  mediaUploadedAt DateTime?
+  status          WhatsappMessageInboxStatus @default(RECEIVED)
+  sessionId       String                     @default("cmw98k683027xdlh6dvvycc7b") @db.VarChar(191)
+  temp            String                     @default(" " )
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  @@map("whatsapp_message_inbox")
+}
+
+enum WhatsappMessageOutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
+model WhatsappMessageOutbox {
+  id          String   @id @default(cuid())
+  inboxId     String   @unique
+  payload     Json
+
+  status      WhatsappMessageOutboxStatus @default(PENDING)
+  retryCount  Int      @default(0)
+  lastError   String?  @db.Text
+  publishedAt DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@map("whatsapp_message_outbox")
+}

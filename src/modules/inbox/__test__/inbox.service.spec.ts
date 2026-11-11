@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { MockInstance } from 'vitest';
-import type { PrismaService } from '@libs/common/prisma/index.js';
-import type { Prisma } from '@libs/common/prisma/src/index.js';
+import { InboxRepository, type PrismaService } from '@libs/prisma';
+import type { Prisma } from '@database/client.js';
 import type { WAMessage } from '@whiskeysockets/baileys';
 import { InboxService } from '../providers/inbox.service.ts';
 import { deserializeInboxMessage } from '../utils/inbox.util.ts';
@@ -23,9 +23,11 @@ describe('InboxService', () => {
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => {});
     upsert = vi.fn().mockResolvedValue({});
-    inbox = new InboxService({
-      whatsappMessageInbox: { upsert },
-    } as unknown as PrismaService);
+    inbox = new InboxService(
+      new InboxRepository({
+        whatsappMessageInbox: { upsert },
+      } as unknown as PrismaService),
+    );
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -44,6 +46,7 @@ describe('InboxService', () => {
         haveMedia: false,
         mediaStatus: 'NOT_REQUIRED',
         status: 'READY',
+        temp: 'undefined:پیام بدون فایل',
       },
       update: {},
     });

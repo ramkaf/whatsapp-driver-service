@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { InboxController } from './controllers/inbox.controller.ts';
 import { InboxService } from './providers/inbox.service.ts';
-import { PrismaModule } from '@libs/common/prisma/index.js';
+import { PrismaModule } from '@libs/prisma';
 import { InboxMediaWorker } from './providers/inbox-media.worker.ts';
 import { ConnectionModule } from '../connection/connection.module.ts';
 import { MediaModule } from '../media/media.module.ts';

@@ -1,4 +1,4 @@
-import type { WaSessionStatus } from '@libs/prisma';
+import type { WaSessionStatus } from '@database/client.js';
 import type { CONNECTION_REASONS } from './connection-status.ts';
 
 export interface PairingSecret {

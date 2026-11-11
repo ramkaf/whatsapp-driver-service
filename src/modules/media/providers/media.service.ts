@@ -16,6 +16,7 @@ import type {
   TemporaryMediaFile,
   WhatsappMediaSocket,
 } from '../interfaces/media.interface.ts';
+
 import { MinioStorageService } from './minio-storage.service.ts';
 import { getMessageMediaDescriptor } from '../utils/media-descriptor.util.ts';
 import { buildMediaObjectKey } from '../utils/media-object-key.util.ts';
@@ -26,13 +27,10 @@ const MAX_MEDIA_SIZE = 25 * 1024 * 1024;
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
-
   private readonly baileysLogger = pino({
     level: 'silent',
   });
-
   private readonly messageSaves = new SessionQueue();
-
   private readonly assetSaves = new SessionQueue();
 
   constructor(private readonly storageService: MinioStorageService) {}
@@ -67,8 +65,7 @@ export class MediaService {
     prepared: PreparedMedia,
     startedAt: number,
   ): Promise<StoredWhatsappMedia> {
-    const { media, chatId , messageId } = prepared;
-
+    const { media, chatId, messageId } = prepared;
     let temporary: TemporaryMediaFile | undefined;
     let operation = 'download';
 
@@ -80,23 +77,15 @@ export class MediaService {
       const objectKey = buildMediaObjectKey(temporary.sha256);
 
       const asset = await this.assetSaves.run(temporary.sha256, async () => {
-        operation = 'check-existing';
-
+        operation = 'lookup';
         const existing = await this.storageService.getExistingObject(
           objectKey,
           temporary!.size,
           temporary!.sha256,
         );
-
-        if (existing) {
-          return {
-            stored: existing,
-            existed: true,
-          };
-        }
+        if (existing) return { stored: existing };
 
         operation = 'upload';
-
         const stored = await this.uploadTemporaryFile(
           temporary!.filePath,
           objectKey,
@@ -105,10 +94,7 @@ export class MediaService {
           temporary!.sha256,
         );
 
-        return {
-          stored,
-          existed: false,
-        };
+        return { stored };
       });
 
       const result: StoredWhatsappMedia = {
@@ -121,16 +107,6 @@ export class MediaService {
         sha256: temporary.sha256,
       };
 
-      this.logger.log({
-        message: asset.existed ? 'Media already stored' : 'Media saved',
-        chatId,
-        messageId,
-        objectKey,
-        sha256: temporary.sha256,
-        size: temporary.size,
-        durationMs: Date.now() - startedAt,
-      });
-
       return result;
     } catch (error) {
       this.logger.error({
@@ -141,11 +117,14 @@ export class MediaService {
         error: error instanceof Error ? error.message : String(error),
         durationMs: Date.now() - startedAt,
       });
-
       throw error;
     } finally {
       if (temporary) {
-        await this.cleanupTemporaryDirectory(temporary.directory, chatId , messageId);
+        await this.cleanupTemporaryDirectory(
+          temporary.directory,
+          chatId,
+          messageId,
+        );
       }
     }
   }
@@ -157,7 +136,6 @@ export class MediaService {
     message: WAMessage,
   ): Promise<TemporaryMediaFile> {
     const directory = await mkdtemp(join(tmpdir(), 'whatsapp-media-'));
-
     const filePath = join(directory, 'attachment');
 
     try {
@@ -245,7 +223,8 @@ export class MediaService {
    */
   private async cleanupTemporaryDirectory(
     directory: string,
-    chatId:string , messageId:string
+    chatId: string,
+    messageId: string,
   ): Promise<void> {
     try {
       await rm(directory, {
@@ -279,6 +258,7 @@ export class MediaService {
       messageId,
     };
   }
+
   private downloadMedia(
     socket: WhatsappMediaSocket,
     message: WAMessage,

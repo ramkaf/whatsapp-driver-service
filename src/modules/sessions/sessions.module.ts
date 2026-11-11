@@ -5,14 +5,12 @@ import { ConnectionModule } from '../connection/connection.module.ts';
 import { PairingModule } from '../pairing/pairing.module.ts';
 import { SessionDataModule } from './session-data.module.ts';
 import { AdminGuard } from './guards/admin.guard.ts';
-import { SessionRepository } from './session.repository.ts';
-import { PrismaModule } from '@libs/prisma';
 
 // APIهای مدیریت سشن و جفت‌سازی را همراه با سرویس‌ها و کنترل دسترسی آن‌ها فراهم می‌کند.
 @Module({
-  imports: [PrismaModule, SessionDataModule, ConnectionModule, PairingModule],
-  providers: [SessionsService, AdminGuard, SessionRepository],
+  imports: [SessionDataModule, ConnectionModule, PairingModule],
+  providers: [SessionsService, AdminGuard],
   controllers: [SessionsController],
-  exports: [SessionsService, AdminGuard, SessionRepository],
+  exports: [SessionsService, AdminGuard, SessionDataModule],
 })
 export class SessionsModule {}

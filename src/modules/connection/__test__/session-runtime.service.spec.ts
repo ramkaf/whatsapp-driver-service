@@ -1,5 +1,5 @@
 import { PairingMethodEnum } from '../../sessions/interfaces/session.interface.ts';
-import type { WaSession } from '@libs/prisma';
+import type { WaSession } from '@database/client.js';
 import type { WASocket } from '@whiskeysockets/baileys';
 import { SessionRuntimeService } from '../providers/session/session-runtime.service.ts';
 import { CONNECTION_REASONS } from '../interfaces/connection-status.ts';
