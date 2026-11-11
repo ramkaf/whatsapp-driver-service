@@ -18,11 +18,11 @@ libs/
 مسیر `libs/common/src/config` شامل موارد زیر است:
 
 - `AppConfigModule`: ثبت سراسری `ConfigModule` در NestJS.
-- `configuer`: ساخت تنظیمات برنامه با کلید `app`.
+- `configure`: ساخت تنظیمات برنامه با کلید `app`.
 - `config.validation`: اعتبارسنجی متغیرهای محیطی.
 - `config.interface`: نوع `IAppConfig`.
 - `config.enum`: مقادیر محیط اجرای برنامه.
-- `afra-logger-configuer`: تنظیمات APM logger از متغیرهای محیطی.
+- `afra-logger-configure`: تنظیمات APM logger از متغیرهای محیطی.
 
 متغیرهای اصلی در `.env.example` مستند شده‌اند. مقدار پورت به‌ترتیب از `APP_PORT`، سپس `PORT` و در نهایت `3000` خوانده می‌شود. پیشوند API با `API_PREFIX` کنترل می‌شود.
 
@@ -30,12 +30,12 @@ libs/
 
 ```ts
 import { AppConfigModule } from '@libs/common';
-import { configuer } from '@libs/common';
+import { configure } from '@libs/common';
 
 @Module({ imports: [AppConfigModule] })
 export class AppModule {}
 
-const config = app.get(configuer.KEY);
+const config = app.get(configure.KEY);
 ```
 
 ### Logger

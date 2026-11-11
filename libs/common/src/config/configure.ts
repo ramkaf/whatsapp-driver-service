@@ -3,7 +3,7 @@ import { EEnvironment } from './config.enum.ts';
 import type { IAppConfig } from './config.interface.ts';
 import { validateEnvironment } from './config.validation.ts';
 
-export const configuer = registerAs('app', (): IAppConfig => {
+export const configure = registerAs('app', (): IAppConfig => {
   const env = validateEnvironment(process.env);
 
   return {

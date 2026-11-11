@@ -1,14 +1,15 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { configuer } from './configuer.ts';
+import { configure } from './configure.ts';
 import { databaseConfig } from './db/database.config.ts';
+import { redisConfig } from './redis/redis.config.ts';
 
 @Global()
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [configuer, databaseConfig],
+      load: [configure, databaseConfig, redisConfig],
     }),
   ],
 })
