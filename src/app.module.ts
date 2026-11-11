@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
-import { AppConfigModule, RabbitMQModule } from '@libs/common';
-import { ConfigService } from '@nestjs/config';
+import {
+  AppConfigModule,
+  RabbitMQModule,
+  RedisModule,
+  type RedisConfig,
+} from '@libs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller.ts';
 import { AppService } from './app.service.ts';
 import { PrismaModule } from '@libs/prisma';
@@ -19,6 +24,13 @@ import { PrismaModule } from '@libs/prisma';
           'RABBITMQ_TOPOLOGY_PATH',
           'config/rabbitmq.topology.json',
         ),
+      }),
+    }),
+    RedisModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        redis: config.getOrThrow<RedisConfig>('redis'),
       }),
     }),
     PrismaModule,
