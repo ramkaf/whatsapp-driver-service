@@ -11,7 +11,6 @@ datasource db {
   provider = "mysql"
 }
 
-
 enum WaSessionStatus {
   DISCONNECTED
   CONNECTING
@@ -121,23 +120,37 @@ enum WhatsappMessageMediaStatus {
   PROCESSING
   UPLOADED
   FAILED
+  DOWNLOAD_FAILED
+  UPLOAD_FAILED
+  EXHAUSTED
 }
 
 model WhatsappMessageInbox {
-  id              String                    @id @default(cuid())
-  key             String                    @unique @db.VarChar(191)
-  payload         Json
-  haveMedia       Boolean                   @default(false)
-  mediaStatus     WhatsappMessageMediaStatus @default(NOT_REQUIRED)
-  mediaObjectKey  String?                   @db.VarChar(1024)
-  mediaMimeType   String?                   @db.VarChar(150)
-  mediaUploadedAt DateTime?
-  status          WhatsappMessageInboxStatus @default(RECEIVED)
-  sessionId       String                     @default("cmw98k683027xdlh6dvvycc7b") @db.VarChar(191)
-  temp            String                     @default(" " )
-  createdAt       DateTime                   @default(now())
-  updatedAt       DateTime                   @updatedAt
+  id                   String                     @id @default(cuid())
+  key                  String                     @unique @db.VarChar(191)
+  event                String                     @db.VarChar(64)
+  payload              Json
+  reformPayload        Json?
+  media                Json?
+  haveMedia            Boolean                    @default(false)
+  mediaStatus          WhatsappMessageMediaStatus @default(NOT_REQUIRED)
+  mediaUploadedAt      DateTime?
+  mediaAttemptCount    Int                        @default(0)
+  mediaNextAttemptAt   DateTime?
+  mediaLastError       String?                    @db.Text
+  mediaLastErrorCode   String?                    @db.VarChar(128)
+  mediaLastErrorStage  String?                    @db.VarChar(32)
+  mediaProcessingToken String?                    @db.VarChar(36)
+  mediaLeaseExpiresAt  DateTime?
+  status               WhatsappMessageInboxStatus @default(RECEIVED)
+  sessionId            String                     @default("cmw98k683027xdlh6dvvycc7b") @db.VarChar(191)
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
 
+  @@index([status, createdAt])
+  @@index([haveMedia, mediaStatus, updatedAt])
+  @@index([mediaStatus, mediaNextAttemptAt])
+  @@index([mediaStatus, mediaLeaseExpiresAt])
   @@map("whatsapp_message_inbox")
 }
 
@@ -149,17 +162,17 @@ enum WhatsappMessageOutboxStatus {
 }
 
 model WhatsappMessageOutbox {
-  id          String   @id @default(cuid())
-  inboxId     String   @unique
-  payload     Json
+  id      String @id @default(cuid())
+  inboxId String @unique
+  payload Json
 
   status      WhatsappMessageOutboxStatus @default(PENDING)
-  retryCount  Int      @default(0)
-  lastError   String?  @db.Text
+  retryCount  Int                         @default(0)
+  lastError   String?                     @db.Text
   publishedAt DateTime?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status, createdAt])
   @@map("whatsapp_message_outbox")

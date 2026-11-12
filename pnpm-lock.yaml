@@ -77,6 +77,9 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      undici:
+        specifier: 8.12.4
+        version: 8.12.4
       ws:
         specifier: ^8.22.1
         version: 8.22.2
@@ -3664,6 +3667,10 @@ packages:
   undici@6.20.1:
     resolution: {integrity: sha512-AjQF1QsmqfJys+LXfGTNum+qw4S88CojRInG/6t31W/1fk6G59s92bnAvGz5Cmur+kQv2SURXEvvudLmbrE8QA==}
     engines: {node: '>=18.17'}
+
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
+    engines: {node: '>=22.19.0'}
 
   unicode-byte-truncate@1.0.0:
     resolution: {integrity: sha512-GQgHk6DodEoKddKQdjnv7xKS9G09XCfHWX0R4RKht+EbUMSiVEmtWHGFO8HUm+6NvWik3E2/DG4MxTitOLL64A==}
@@ -7324,6 +7331,8 @@ snapshots:
   undici-types@7.24.6: {}
 
   undici@6.20.1: {}
+
+  undici@8.12.4: {}
 
   unicode-byte-truncate@1.0.0:
     dependencies:

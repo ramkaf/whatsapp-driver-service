@@ -1,17 +1,17 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-
 import type { OnModuleInit } from '@nestjs/common';
-
 import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
-
 import * as Minio from 'minio';
 import type { Readable } from 'node:stream';
+import * as http from 'node:http';
+import * as https from 'node:https';
 
 import type {
   MinioObjectInfo,
   StoredMinioObject,
 } from '../interfaces/media.interface.ts';
+import { createTimeoutTransport } from '../utils/media-network-timeout.util.ts';
 
 const DOWNLOAD_URL_TTL_SECONDS = 7 * 24 * 60 * 60;
 
@@ -38,6 +38,9 @@ export class MinioStorageService implements OnModuleInit {
       useSSL: useSsl,
       accessKey,
       secretKey,
+      transport: createTimeoutTransport(useSsl ? https : http),
+      // Persistent inbox retries own the schedule and observability.
+      retryOptions: { disableRetry: true },
     });
   }
 
@@ -47,7 +50,6 @@ export class MinioStorageService implements OnModuleInit {
     if (!exists) {
       await this.client.makeBucket(this.bucket, 'us-east-1');
     }
-
     this.logger.log(`MinIO ready: ${this.bucket}`);
   }
 
@@ -84,16 +86,13 @@ export class MinioStorageService implements OnModuleInit {
     expectedSha256: string,
   ): Promise<StoredMinioObject | null> {
     const current = await this.getObjectInfo(objectKey);
-
     if (!current) {
       return null;
     }
-
     // Same content already exists.
     if (current.size === expectedSize && current.sha256 === expectedSha256) {
       return this.getStoredObject(current.objectKey, current.etag);
     }
-
     // Existing object is not a valid match.
     this.logger.warn({
       message: 'Existing object failed integrity check',

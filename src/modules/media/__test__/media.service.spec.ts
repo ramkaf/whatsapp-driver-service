@@ -3,10 +3,16 @@ import { createHash } from 'node:crypto';
 import type { ReadStream } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { Readable } from 'node:stream';
+import { Dispatcher1Wrapper } from 'undici';
 import type { WAMessage, WAMessageContent } from '@whiskeysockets/baileys';
 import { MediaService } from '../providers/media.service.ts';
 import type { MinioStorageService } from '../providers/minio-storage.service.ts';
 import type { StoredMinioObject } from '../interfaces/media.interface.ts';
+import {
+  createMediaTransferFailure,
+  isMediaTransferFailure,
+} from '../utils/media-transfer-failure.util.ts';
+import { MEDIA_NETWORK_TIMEOUT_MS } from '../utils/media-network-timeout.util.ts';
 
 const { downloadMediaMessage } = vi.hoisted(() => ({
   downloadMediaMessage: vi.fn(),
@@ -170,13 +176,19 @@ describe('MediaService', () => {
         mimeType,
         originalFileName: type === 'document' ? 'report.PDF' : null,
         sha256,
+        size: bytes.length,
       });
       expect(downloadMediaMessage).toHaveBeenCalledWith(
         input,
         'stream',
-        {},
+        {
+          options: {
+            signal: expect.any(AbortSignal),
+            dispatcher: expect.any(Dispatcher1Wrapper),
+          },
+        },
         expect.objectContaining({
-          reuploadRequest: f.socket.updateMediaMessage,
+          reuploadRequest: expect.any(Function),
         }),
       );
       expect(f.storage.getExistingObject).toHaveBeenCalledExactlyOnceWith(
@@ -296,43 +308,62 @@ describe('MediaService', () => {
     expect(f.downloads[0].destroyed).toBe(true);
   });
 
-  it('propagates download and object-lookup failures without uploading', async () => {
+  it('returns download and object-lookup failures with their stages without uploading', async () => {
     const f = fixture();
     const downloadFailure = new Error('download unavailable');
     downloadMediaMessage.mockRejectedValueOnce(downloadFailure);
-    await expect(f.service.save(f.socket, message())).rejects.toBe(
-      downloadFailure,
-    );
+    await expect(f.service.save(f.socket, message())).resolves.toEqual({
+      status: 'failed',
+      stage: 'download',
+      operation: 'download',
+      error: downloadFailure.message,
+      errorCode: null,
+    });
     expect(f.storage.getExistingObject).not.toHaveBeenCalled();
     const lookupFailure = new Error('MinIO unavailable');
     f.storage.getExistingObject.mockRejectedValueOnce(lookupFailure);
-    await expect(f.service.save(f.socket, message())).rejects.toBe(
-      lookupFailure,
-    );
+    await expect(f.service.save(f.socket, message())).resolves.toEqual({
+      status: 'failed',
+      stage: 'upload',
+      operation: 'lookup',
+      error: lookupFailure.message,
+      errorCode: null,
+    });
     expect(f.storage.uploadStream).not.toHaveBeenCalled();
+    expect(vi.spyOn(Logger.prototype, 'error')).not.toHaveBeenCalled();
   });
 
   it('closes the upload stream and removes its temporary file after an upload failure', async () => {
     const f = fixture();
-    const failure = new Error('upload unavailable');
+    const failure = Object.assign(new Error('upload unavailable'), {
+      code: 'ECONNREFUSED',
+    });
     f.storage.uploadStream.mockRejectedValueOnce(failure);
-    await expect(f.service.save(f.socket, message())).rejects.toBe(failure);
+    await expect(f.service.save(f.socket, message())).resolves.toEqual({
+      status: 'failed',
+      stage: 'upload',
+      operation: 'upload',
+      error: failure.message,
+      errorCode: 'ECONNREFUSED',
+    });
     const stream = f.storage.uploadStream.mock.calls[0][1] as ReadStream;
     expect(stream.destroyed).toBe(true);
     await expect(access(stream.path)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('rejects empty media before checking or uploading an object', async () => {
+  it('returns a failure for empty media before checking or uploading an object', async () => {
     const f = fixture();
     downloadMediaMessage.mockResolvedValueOnce(Readable.from([]));
-    await expect(f.service.save(f.socket, message())).rejects.toThrow(
-      'Downloaded media is empty',
-    );
+    await expect(f.service.save(f.socket, message())).resolves.toMatchObject({
+      status: 'failed',
+      stage: 'download',
+      error: 'Downloaded media is empty',
+    });
     expect(f.storage.getExistingObject).not.toHaveBeenCalled();
     expect(f.storage.uploadStream).not.toHaveBeenCalled();
   });
 
-  it('rejects media exceeding the streamed 25 MiB limit even when fileLength claims it is small', async () => {
+  it('returns a failure for media exceeding the streamed 25 MiB limit even when fileLength claims it is small', async () => {
     const f = fixture();
     const chunk = Buffer.alloc(1024 * 1024);
     const stream = Readable.from(
@@ -344,14 +375,16 @@ describe('MediaService', () => {
     const input = message({
       imageMessage: { url: 'https://media.invalid/image', fileLength: 1 },
     });
-    await expect(f.service.save(f.socket, input)).rejects.toThrow(
-      'Media exceeds maximum allowed size',
-    );
+    await expect(f.service.save(f.socket, input)).resolves.toMatchObject({
+      status: 'failed',
+      stage: 'download',
+      error: 'Media exceeds maximum allowed size',
+    });
     expect(stream.destroyed).toBe(true);
     expect(f.storage.uploadStream).not.toHaveBeenCalled();
   });
 
-  it('propagates a download stream failure without uploading partial content', async () => {
+  it('returns a download stream failure without uploading partial content', async () => {
     const f = fixture();
     const failure = new Error('stream interrupted');
     downloadMediaMessage.mockResolvedValueOnce(
@@ -362,7 +395,11 @@ describe('MediaService', () => {
         })(),
       ),
     );
-    await expect(f.service.save(f.socket, message())).rejects.toBe(failure);
+    await expect(f.service.save(f.socket, message())).resolves.toMatchObject({
+      status: 'failed',
+      stage: 'download',
+      error: failure.message,
+    });
     expect(f.storage.uploadStream).not.toHaveBeenCalled();
   });
 
@@ -371,11 +408,187 @@ describe('MediaService', () => {
     f.storage.uploadStream.mockRejectedValueOnce(
       new Error('first attempt failed'),
     );
-    await expect(f.service.save(f.socket, message())).rejects.toThrow(
-      'first attempt failed',
-    );
+    await expect(f.service.save(f.socket, message())).resolves.toMatchObject({
+      status: 'failed',
+      stage: 'upload',
+      error: 'first attempt failed',
+    });
     await expect(f.service.save(f.socket, message())).resolves.toMatchObject({
       objectKey,
     });
+  });
+
+  it('returns a bounded download failure and destroys a stalled media stream', async () => {
+    const f = fixture();
+    const stream = new Readable({ read() {} });
+    downloadMediaMessage.mockResolvedValueOnce(stream);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const result = f.service.save(f.socket, message());
+    // Wait until filesystem preparation finishes and the pipeline starts.
+    await vi.waitFor(() => expect(downloadMediaMessage).toHaveBeenCalledOnce());
+    const dispatcher = downloadMediaMessage.mock.calls[0][2].options
+      .dispatcher as Dispatcher1Wrapper;
+    const destroy = vi.spyOn(dispatcher, 'destroy');
+    const signal = downloadMediaMessage.mock.calls[0][2].options
+      .signal as AbortSignal;
+    expect(signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(MEDIA_NETWORK_TIMEOUT_MS);
+    await expect(result).resolves.toMatchObject({
+      stage: 'download',
+      errorCode: 'MEDIA_REQUEST_TIMEOUT',
+    });
+    expect(stream.destroyed).toBe(true);
+    expect(destroy).toHaveBeenCalled();
+    expect(f.storage.uploadStream).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('bounds a download that never returns response headers', async () => {
+    const f = fixture();
+    downloadMediaMessage.mockImplementationOnce(() => new Promise(() => {}));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const result = f.service.save(f.socket, message());
+    await vi.waitFor(() => expect(downloadMediaMessage).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(MEDIA_NETWORK_TIMEOUT_MS);
+    await expect(result).resolves.toMatchObject({
+      status: 'failed',
+      stage: 'download',
+      errorCode: 'MEDIA_REQUEST_TIMEOUT',
+    });
+    expect(f.storage.uploadStream).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+});
+
+describe('MediaService thumbnails', () => {
+  const thumbnail = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  const thumbnailHash = createHash('sha256').update(thumbnail).digest('hex');
+  const thumbnailKey =
+    'media/sha256/' + thumbnailHash.slice(0, 2) + '/' + thumbnailHash;
+
+  it('stores exact JPEG bytes with their checksum and returns the durable object key', async () => {
+    const f = fixture();
+    const input = message({ imageMessage: { jpegThumbnail: thumbnail } });
+    await expect(f.service.saveThumbnail(input)).resolves.toBe(thumbnailKey);
+
+    expect(f.storage.getExistingObject).toHaveBeenCalledExactlyOnceWith(
+      thumbnailKey,
+      thumbnail.length,
+      thumbnailHash,
+    );
+    expect(f.storage.uploadStream).toHaveBeenCalledExactlyOnceWith(
+      thumbnailKey,
+      expect.any(Readable),
+      thumbnail.length,
+      'image/jpeg',
+      thumbnailHash,
+    );
+    expect(Buffer.concat(f.uploadedBytes)).toEqual(thumbnail);
+    expect(downloadMediaMessage).not.toHaveBeenCalled();
+    expect(input.message?.imageMessage?.jpegThumbnail).toEqual(thumbnail);
+  });
+
+  it('reuses an existing thumbnail object without uploading it again', async () => {
+    const f = fixture();
+    f.storage.getExistingObject.mockResolvedValueOnce(stored(thumbnailKey));
+    await expect(
+      f.service.saveThumbnail(
+        message({ imageMessage: { jpegThumbnail: thumbnail } }),
+      ),
+    ).resolves.toBe(thumbnailKey);
+    expect(f.storage.uploadStream).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { imageMessage: {} },
+    { imageMessage: { jpegThumbnail: new Uint8Array() } },
+    { audioMessage: { ptt: true } },
+    { conversation: 'plain text' },
+    null,
+  ] satisfies (WAMessageContent | null)[])(
+    'does not create an object for absent or empty thumbnails: %j',
+    async (content) => {
+      const f = fixture();
+      await expect(
+        f.service.saveThumbnail(message(content)),
+      ).resolves.toBeNull();
+      expect(f.storage.getExistingObject).not.toHaveBeenCalled();
+      expect(f.storage.uploadStream).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    'imageMessage',
+    'videoMessage',
+    'ptvMessage',
+    'documentMessage',
+  ] as const)('extracts a wrapped %s thumbnail', async (field) => {
+    const f = fixture();
+    const input = message({
+      ephemeralMessage: { message: { [field]: { jpegThumbnail: thumbnail } } },
+    });
+    await expect(f.service.saveThumbnail(input)).resolves.toBe(thumbnailKey);
+    expect(Buffer.concat(f.uploadedBytes)).toEqual(thumbnail);
+  });
+
+  it('allows retrying the same thumbnail after an upload failure', async () => {
+    const f = fixture();
+    const input = message({ imageMessage: { jpegThumbnail: thumbnail } });
+    const failure = new Error('thumbnail storage unavailable');
+    f.storage.uploadStream.mockRejectedValueOnce(failure);
+    await expect(f.service.saveThumbnail(input)).resolves.toEqual({
+      status: 'failed',
+      stage: 'upload',
+      operation: 'thumbnail_upload',
+      error: failure.message,
+      errorCode: null,
+    });
+    await expect(f.service.saveThumbnail(input)).resolves.toBe(thumbnailKey);
+    expect(f.storage.uploadStream).toHaveBeenCalledTimes(2);
+    expect(Buffer.concat(f.uploadedBytes)).toEqual(thumbnail);
+  });
+
+  it('returns an upload failure if looking up the thumbnail fails', async () => {
+    const f = fixture();
+    f.storage.getExistingObject.mockRejectedValueOnce(
+      Object.assign(new Error('MinIO unavailable'), { code: 'ETIMEDOUT' }),
+    );
+    await expect(
+      f.service.saveThumbnail(
+        message({ imageMessage: { jpegThumbnail: thumbnail } }),
+      ),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      stage: 'upload',
+      operation: 'thumbnail_lookup',
+      errorCode: 'ETIMEDOUT',
+    });
+    expect(f.storage.uploadStream).not.toHaveBeenCalled();
+  });
+});
+
+describe('media transfer failure details', () => {
+  it('redacts signed URLs and credentials while retaining the error code', () => {
+    const failure = createMediaTransferFailure(
+      'upload',
+      'upload',
+      Object.assign(
+        new Error(
+          'request https://minio.test/file?X-Amz-Signature=secret failed\nsecretKey=private authorization=Bearer private',
+        ),
+        { code: 'ECONNRESET' },
+      ),
+    );
+    expect(failure).toEqual({
+      status: 'failed',
+      stage: 'upload',
+      operation: 'upload',
+      error:
+        'request [redacted-url] failed secretKey=[redacted] authorization=[redacted]',
+      errorCode: 'ECONNRESET',
+    });
+    expect(isMediaTransferFailure(failure)).toBe(true);
+    expect(isMediaTransferFailure(stored())).toBe(false);
+    expect(isMediaTransferFailure(null)).toBe(false);
   });
 });

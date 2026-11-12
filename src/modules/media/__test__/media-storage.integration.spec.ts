@@ -5,6 +5,7 @@ import type { IAppConfig } from '@libs/common';
 import type { WAMessage } from '@whiskeysockets/baileys';
 import { MediaService } from '../providers/media.service.ts';
 import { MinioStorageService } from '../providers/minio-storage.service.ts';
+import { isMediaTransferFailure } from '../utils/media-transfer-failure.util.ts';
 
 const { downloadMediaMessage, statObject, putObject, presignedGetObject } =
   vi.hoisted(() => ({
@@ -117,6 +118,11 @@ describe('MediaService integration with MinioStorageService', () => {
     const results = await Promise.all(
       messages.map((message) => media.save(context, message)),
     );
+    const stored = results.map((result) => {
+      if (!result || isMediaTransferFailure(result))
+        throw new Error('Expected successful media storage');
+      return result;
+    });
     expect(downloadMediaMessage).toHaveBeenCalledTimes(2);
     expect(putObject).toHaveBeenCalledOnce();
     expect(presignedGetObject).toHaveBeenCalledTimes(2);
@@ -127,8 +133,8 @@ describe('MediaService integration with MinioStorageService', () => {
         'x-amz-meta-sha256': hash,
       },
     });
-    expect(results.map((result) => result!.objectKey)).toEqual([key, key]);
-    expect(new Set(results.map((result) => result!.url)).size).toBe(2);
+    expect(stored.map((result) => result.objectKey)).toEqual([key, key]);
+    expect(new Set(stored.map((result) => result.url)).size).toBe(2);
     for (const [index, result] of results.entries()) {
       expect(result).toMatchObject({
         bucket: 'test-media',
@@ -140,6 +146,31 @@ describe('MediaService integration with MinioStorageService', () => {
         originalFileName: 'report.pdf',
       });
     }
+  });
+
+  it('uploads identical thumbnails once across concurrent conversations', async () => {
+    const thumbnail = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const thumbnailHash = createHash('sha256').update(thumbnail).digest('hex');
+    const thumbnailKey =
+      'media/sha256/' + thumbnailHash.slice(0, 2) + '/' + thumbnailHash;
+    const messages: WAMessage[] = ['first', 'second'].map((chat) => ({
+      key: { remoteJid: chat + '@s.whatsapp.net', id: 'message' },
+      message: { imageMessage: { jpegThumbnail: thumbnail } },
+    }));
+    const results = await Promise.all(
+      messages.map((message) => media.saveThumbnail(message)),
+    );
+
+    expect(results).toEqual([thumbnailKey, thumbnailKey]);
+    expect(putObject).toHaveBeenCalledOnce();
+    expect(downloadMediaMessage).not.toHaveBeenCalled();
+    expect(objects.get(thumbnailKey)).toEqual({
+      bytes: thumbnail,
+      metadata: {
+        'Content-Type': 'image/jpeg',
+        'x-amz-meta-sha256': thumbnailHash,
+      },
+    });
   });
 
   it('replaces an object whose checksum metadata does not match the downloaded content', async () => {
@@ -164,9 +195,33 @@ describe('MediaService integration with MinioStorageService', () => {
       .mockImplementationOnce(async () => Readable.from([different]));
     const first = await media.save(context, attachment());
     const second = await media.save(context, attachment());
-    expect(first!.objectKey).not.toBe(second!.objectKey);
+    if (
+      !first ||
+      !second ||
+      isMediaTransferFailure(first) ||
+      isMediaTransferFailure(second)
+    )
+      throw new Error('Expected successful media storage');
+    expect(first.objectKey).not.toBe(second.objectKey);
     expect(putObject).toHaveBeenCalledTimes(2);
-    expect(objects.get(first!.objectKey)!.bytes).toEqual(bytes);
-    expect(objects.get(second!.objectKey)!.bytes).toEqual(different);
+    expect(objects.get(first.objectKey)!.bytes).toEqual(bytes);
+    expect(objects.get(second.objectKey)!.bytes).toEqual(different);
+  });
+
+  it('returns an upload failure if signing fails and reuses the already uploaded file on retry', async () => {
+    presignedGetObject.mockRejectedValueOnce(
+      Object.assign(new Error('signing unavailable'), { code: 'ETIMEDOUT' }),
+    );
+    await expect(media.save(context, attachment())).resolves.toMatchObject({
+      status: 'failed',
+      stage: 'upload',
+      operation: 'upload',
+      errorCode: 'ETIMEDOUT',
+    });
+    expect(objects.get(key)!.bytes).toEqual(bytes);
+    await expect(media.save(context, attachment())).resolves.toMatchObject({
+      objectKey: key,
+    });
+    expect(putObject).toHaveBeenCalledOnce();
   });
 });

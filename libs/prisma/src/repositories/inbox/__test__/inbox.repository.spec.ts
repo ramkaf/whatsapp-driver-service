@@ -19,7 +19,11 @@ describe('InboxRepository', () => {
     } as unknown as PrismaService);
     const args = {
       where: { key: 'message-one' },
-      create: { key: 'message-one', payload: { text: 'hello' } },
+      create: {
+        key: 'message-one',
+        event: 'messages.upsert',
+        payload: { text: 'hello' },
+      },
       update: {},
       select: { id: true },
     } satisfies Prisma.WhatsappMessageInboxUpsertArgs;

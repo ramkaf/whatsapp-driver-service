@@ -1,23 +1,17 @@
-import { Inject, Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
-import { InboxService } from '../../../inbox/providers/inbox.service.ts';
+import type { Prisma } from '@database/client.js';
+import { Injectable } from '@nestjs/common';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
-/** Handles edits, delivery status changes and other message updates. */
 @Injectable()
-export class MessagesUpdateEventHandler extends MessageEventHandler<'messages.update'> {
+export class MessagesUpdateEventHandler extends InboxEventHandler<'messages.update'> {
   readonly event = 'messages.update' as const;
-
-  constructor(
-    @Inject(InboxService) private readonly inboxService: InboxService,
-  ) {
-    super();
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
   }
 
-  async handle(
-    event: ConnectionMessageEvent<'messages.update'>,
-  ): Promise<void> {
-    for (const update of event.data) {
-    }
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

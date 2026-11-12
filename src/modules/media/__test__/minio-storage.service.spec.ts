@@ -64,6 +64,8 @@ describe('MinioStorageService', () => {
       useSSL: true,
       accessKey: 'test-access',
       secretKey: 'test-secret',
+      transport: { request: expect.any(Function) },
+      retryOptions: { disableRetry: true },
     });
     expect(storage.bucket).toBe('test-bucket');
   });

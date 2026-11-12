@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import type { Provider } from '@nestjs/common';
-import type { WASocket } from '@whiskeysockets/baileys';
+import type { BaileysEventMap, WASocket } from '@whiskeysockets/baileys';
 import { SocketEventRegistrarService } from '../../connection/providers/socket/socket-event-registrar.service.ts';
 import type { RealtimeService } from '../../connection/providers/realtime/realtime.service.ts';
 import {
@@ -16,7 +16,7 @@ import { MessagesReceiveService } from '../receive/providers/messages-receive.se
 import { MESSAGE_EVENT_HANDLERS } from '../receive/interfaces/message-event-handler.ts';
 import type { MessageEventHandler } from '../receive/interfaces/message-event-handler.ts';
 import { InboxService } from '../../inbox/providers/inbox.service.ts';
-import { JsonlUtil } from '../../../utils/jsonl.util.ts';
+import { toInboxEntries } from '../receive/utils/message-inbox-entry.util.ts';
 
 const first = {
   key: { remoteJid: 'chat@s.whatsapp.net', id: 'first', fromMe: false },
@@ -35,12 +35,15 @@ describe('Receiving events from connection sockets', () => {
   let publish: ReturnType<typeof vi.fn>;
   let handle: ReturnType<typeof vi.fn>;
   let subscribe: ReturnType<typeof vi.spyOn>;
+  let loggedError: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
     publish = vi.fn();
     handle = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
-    vi.spyOn(JsonlUtil, 'append').mockResolvedValue(undefined);
+    loggedError = vi
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => {});
     source = new SocketEventRegistrarService({
       publish,
     } as unknown as RealtimeService);
@@ -105,14 +108,128 @@ describe('Receiving events from connection sockets', () => {
       source.register('account-one', { ev } as unknown as WASocket);
       ev.emit('messages.upsert', { messages: [first, second], type });
       await receiver.onModuleDestroy();
-      expect(handle.mock.calls).toEqual([
-        [first, 'account-one'],
-        [second, 'account-one'],
-      ]);
+      expect(handle.mock.calls).toEqual(
+        toInboxEntries({
+          event: 'messages.upsert',
+          sessionId: 'account-one',
+          at: '',
+          data: { messages: [first, second], type },
+        }).map((entry) => [expect.objectContaining(entry)]),
+      );
     },
   );
 
-  it('queues historical messages through the same inbox path', async () => {
+  it.each(['add', 'remove', 'promote', 'demote', 'modify'] as const)(
+    'skips inbox writes for disabled group participant action %s',
+    async (action) => {
+      const ev = new EventEmitter();
+      source.register('account-one', { ev } as unknown as WASocket);
+      const data: BaileysEventMap['group-participants.update'] = {
+        id: 'group@g.us',
+        author: 'admin@lid',
+        authorPn: 'admin@s.whatsapp.net',
+        participants: [
+          { id: 'member@lid', phoneNumber: 'member@s.whatsapp.net' },
+        ],
+        action,
+      };
+      ev.emit('group-participants.update', data);
+      await receiver.onModuleDestroy();
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  it('skips inbox writes when a member leaves the group', async () => {
+    const ev = new EventEmitter();
+    source.register('account-one', { ev } as unknown as WASocket);
+    const data: BaileysEventMap['group-participants.update'] = {
+      id: 'group@g.us',
+      author: 'member@lid',
+      participants: [{ id: 'member@lid' }],
+      action: 'remove',
+    };
+    ev.emit('group-participants.update', data);
+    await receiver.onModuleDestroy();
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it('publishes group metadata updates without saving them to the inbox', async () => {
+    const ev = new EventEmitter();
+    source.register('account-one', { ev } as unknown as WASocket);
+    const updates: BaileysEventMap['groups.update'] = [
+      {
+        id: 'first@g.us',
+        subject: 'New name',
+        desc: 'New description',
+        author: 'admin@lid',
+      },
+      {
+        id: 'second@g.us',
+        announce: true,
+        restrict: true,
+        inviteCode: 'new-invite',
+        memberAddMode: false,
+        joinApprovalMode: true,
+      },
+    ];
+    ev.emit('groups.update', updates);
+    await receiver.onModuleDestroy();
+    expect(handle).not.toHaveBeenCalled();
+    expect(publish).toHaveBeenCalledExactlyOnceWith(
+      'account-one',
+      'groups.update',
+      updates,
+    );
+  });
+
+  it('skips inbox writes for newly discovered group metadata', async () => {
+    const ev = new EventEmitter();
+    source.register('account-one', { ev } as unknown as WASocket);
+    const group: BaileysEventMap['groups.upsert'][number] = {
+      id: 'group@g.us',
+      owner: 'admin@lid',
+      subject: 'Group',
+      participants: [{ id: 'member@lid' }],
+    };
+    ev.emit('groups.upsert', [group]);
+    await receiver.onModuleDestroy();
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it.each(['created', 'revoked', 'rejected'] as const)(
+    'skips inbox writes for a %s group join request',
+    async (action) => {
+      const ev = new EventEmitter();
+      source.register('account-one', { ev } as unknown as WASocket);
+      const data: BaileysEventMap['group.join-request'] = {
+        id: 'group@g.us',
+        author: 'admin@lid',
+        participant: 'member@lid',
+        action,
+        method: 'invite_link',
+      };
+      ev.emit('group.join-request', data);
+      await receiver.onModuleDestroy();
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  it('skips inbox writes for group member label changes', async () => {
+    const ev = new EventEmitter();
+    source.register('account-one', { ev } as unknown as WASocket);
+    const data: BaileysEventMap['group.member-tag.update'] = {
+      groupId: 'group@g.us',
+      participant: 'member@lid',
+      participantAlt: 'member@s.whatsapp.net',
+      label: 'Organizer',
+      messageTimestamp: 123,
+    };
+    ev.emit('group.member-tag.update', data);
+    await receiver.onModuleDestroy();
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it('skips historical messages while their handler is disabled', async () => {
     const ev = new EventEmitter();
     source.register('account-one', { ev } as unknown as WASocket);
     ev.emit('messaging-history.set', {
@@ -121,10 +238,7 @@ describe('Receiving events from connection sockets', () => {
       contacts: [],
     });
     await receiver.onModuleDestroy();
-    expect(handle.mock.calls).toEqual([
-      [first, 'account-one'],
-      [second, 'account-one'],
-    ]);
+    expect(handle).not.toHaveBeenCalled();
   });
 
   it('subscribes only once and preserves the source session for simultaneous accounts', async () => {
@@ -138,7 +252,7 @@ describe('Receiving events from connection sockets', () => {
     expect(subscribe).toHaveBeenCalledOnce();
     expect(
       handle.mock.calls
-        .map(([, sessionId]) => sessionId)
+        .map(([entry]) => entry.sessionId)
         .sort((a: string, b: string) => a.localeCompare(b)),
     ).toEqual(['one', 'three', 'two']);
   });
@@ -149,15 +263,30 @@ describe('Receiving events from connection sockets', () => {
     source.subscribe(consume);
     const ev = new EventEmitter();
     source.register('one', { ev } as unknown as WASocket);
-    ev.emit('messages.upsert', { messages: [first], type: 'notify' });
-    ev.emit('messages.upsert', { messages: [second], type: 'notify' });
+    ev.emit('messages.upsert', { messages: [first, second], type: 'notify' });
     await receiver.onModuleDestroy();
-    expect(handle.mock.calls).toEqual([
-      [first, 'one'],
-      [second, 'one'],
-    ]);
-    expect(consume).toHaveBeenCalledTimes(2);
-    expect(publish).toHaveBeenCalledTimes(2);
+    expect(handle.mock.calls).toEqual(
+      [first, second]
+        .flatMap((message) =>
+          toInboxEntries({
+            event: 'messages.upsert',
+            sessionId: 'one',
+            at: '',
+            data: { messages: [message], type: 'notify' },
+          }),
+        )
+        .map((entry) => [expect.objectContaining(entry)]),
+    );
+    expect(consume).toHaveBeenCalledOnce();
+    expect(publish).toHaveBeenCalledOnce();
+    expect(loggedError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'one',
+        event: 'messages.upsert',
+        reason: 'message_handler_failed',
+        error: expect.any(AggregateError),
+      }),
+    );
   });
 
   it('stops receiving immediately on shutdown and waits for an in-flight inbox write', async () => {

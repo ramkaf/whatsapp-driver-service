@@ -1,14 +1,17 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
 @Injectable()
-export class LidMappingUpdateEventHandler extends MessageEventHandler<'lid-mapping.update'> {
+export class LidMappingUpdateEventHandler extends InboxEventHandler<'lid-mapping.update'> {
   readonly event = 'lid-mapping.update' as const;
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
 
-  async handle(
-    _event: ConnectionMessageEvent<'lid-mapping.update'>,
-  ): Promise<void> {
-    // TODO: Associate LID identifiers with phone-number identifiers.
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

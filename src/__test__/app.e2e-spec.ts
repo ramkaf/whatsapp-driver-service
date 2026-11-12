@@ -5,11 +5,7 @@ import request from 'supertest';
 import { vi } from 'vitest';
 import { AppModule } from '../app.module.ts';
 import { PrismaService, WA_SESSION_REPOSITORY } from '@libs/prisma';
-import {
-  configuer,
-  RabbitMQService,
-  EEnvironment,
-} from '@libs/common';
+import { configuer, RabbitMQService, EEnvironment } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 import { SessionManagerService } from '../modules/connection/providers/session/session-manager.service.ts';
 import { PersistenceFilter } from '../modules/sessions/filters/persistence.filter.ts';

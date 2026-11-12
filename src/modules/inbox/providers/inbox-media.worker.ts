@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { MediaProcessorService } from '../../media/providers/media-processor.service.ts';
+import { createMediaTransferFailure } from '../../media/utils/media-transfer-failure.util.ts';
 
 @Injectable()
 export class InboxMediaWorker {
@@ -11,7 +12,7 @@ export class InboxMediaWorker {
     private readonly processor: MediaProcessorService,
   ) {}
 
-  @Cron('*/5 * * * * *', {
+  @Cron('*/1 * * * * *', {
     name: 'inbox-media',
     waitForCompletion: true,
   })
@@ -19,10 +20,15 @@ export class InboxMediaWorker {
     try {
       await this.processor.processPending();
     } catch (error) {
-      this.logger.error(
-        'Failed to process inbox messages with undownloaded media',
-        error instanceof Error ? error.stack : String(error),
-      );
+      const failure = createMediaTransferFailure('upload', 'poll', error);
+      this.logger.error({
+        event: 'media_worker_poll_failed',
+        message: 'Unable to poll the inbox media queue',
+        worker: 'inbox-media',
+        service: 'database',
+        errorCode: failure.errorCode,
+        error: failure.error,
+      });
     }
   }
 }

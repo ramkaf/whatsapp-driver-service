@@ -4,7 +4,7 @@ import { InboxModule } from '../../inbox/inbox.module.ts';
 import { MESSAGE_EVENT_HANDLERS } from './interfaces/message-event-handler.ts';
 import type { MessageEventHandler } from './interfaces/message-event-handler.ts';
 import { MessagesReceiveService } from './providers/messages-receive.service.ts';
-import { MessagesUpsertEventHandler } from './events/messages-upsert.event.ts';
+import { MessagesUpsertEventHandler } from './events/message-upsert/messages-upsert.event.ts';
 import { MessagesUpdateEventHandler } from './events/messages-update.event.ts';
 import { MessagesDeleteEventHandler } from './events/messages-delete.event.ts';
 import { MessagesReactionEventHandler } from './events/messages-reaction.event.ts';
@@ -22,6 +22,7 @@ import { GroupsUpsertEventHandler } from './events/groups-upsert.event.ts';
 import { GroupsUpdateEventHandler } from './events/groups-update.event.ts';
 import { GroupParticipantsUpdateEventHandler } from './events/group-participants-update.event.ts';
 import { GroupJoinRequestEventHandler } from './events/group-join-request.event.ts';
+import { GroupMemberTagUpdateEventHandler } from './events/group-member-tag-update.event.ts';
 import { PresenceUpdateEventHandler } from './events/presence-update.event.ts';
 import { CallEventHandler } from './events/call.event.ts';
 import { BlocklistSetEventHandler } from './events/blocklist-set.event.ts';
@@ -46,6 +47,7 @@ const eventHandlers = [
   GroupsUpdateEventHandler,
   GroupParticipantsUpdateEventHandler,
   GroupJoinRequestEventHandler,
+  GroupMemberTagUpdateEventHandler,
   PresenceUpdateEventHandler,
   CallEventHandler,
   BlocklistSetEventHandler,

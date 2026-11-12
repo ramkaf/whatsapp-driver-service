@@ -1,12 +1,18 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
+/** Receives newly discovered groups and their metadata snapshots. */
 @Injectable()
-export class GroupsUpsertEventHandler extends MessageEventHandler<'groups.upsert'> {
+export class GroupsUpsertEventHandler extends InboxEventHandler<'groups.upsert'> {
   readonly event = 'groups.upsert' as const;
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
 
-  async handle(_event: ConnectionMessageEvent<'groups.upsert'>): Promise<void> {
-    // TODO: Persist newly discovered group metadata.
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

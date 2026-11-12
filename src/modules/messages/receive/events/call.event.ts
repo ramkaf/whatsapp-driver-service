@@ -1,12 +1,17 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
 @Injectable()
-export class CallEventHandler extends MessageEventHandler<'call'> {
+export class CallEventHandler extends InboxEventHandler<'call'> {
   readonly event = 'call' as const;
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
 
-  async handle(_event: ConnectionMessageEvent<'call'>): Promise<void> {
-    // TODO: Handle incoming call status notifications.
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

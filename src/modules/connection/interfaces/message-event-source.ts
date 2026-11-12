@@ -20,6 +20,7 @@ export const MESSAGE_EVENTS = [
   'groups.update',
   'group-participants.update',
   'group.join-request',
+  'group.member-tag.update',
   'presence.update',
   'call',
   'blocklist.set',

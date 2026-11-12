@@ -4,13 +4,16 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Transform } from 'node:stream';
-import type { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { downloadMediaMessage } from '@whiskeysockets/baileys';
+import {
+  downloadMediaMessage,
+  extractMessageContent,
+} from '@whiskeysockets/baileys';
 import type { WAMessage } from '@whiskeysockets/baileys';
 import { pino } from 'pino';
 import type {
+  MediaTransferFailure,
   PreparedMedia,
   StoredWhatsappMedia,
   TemporaryMediaFile,
@@ -21,6 +24,11 @@ import { MinioStorageService } from './minio-storage.service.ts';
 import { getMessageMediaDescriptor } from '../utils/media-descriptor.util.ts';
 import { buildMediaObjectKey } from '../utils/media-object-key.util.ts';
 import { SessionQueue } from '../../connection/session-queue.ts';
+import { createMediaTransferFailure } from '../utils/media-transfer-failure.util.ts';
+import {
+  abortable,
+  createDownloadDeadline,
+} from '../utils/media-network-timeout.util.ts';
 
 const MAX_MEDIA_SIZE = 25 * 1024 * 1024;
 
@@ -39,22 +47,73 @@ export class MediaService {
     return getMessageMediaDescriptor(message) !== null;
   }
 
+  /** WhatsApp already includes these JPEG bytes in the received message. */
+  async saveThumbnail(
+    message: WAMessage,
+  ): Promise<string | MediaTransferFailure | null> {
+    let operation = 'thumbnail_prepare';
+    try {
+      const content = extractMessageContent(message.message);
+      const thumbnail =
+        content?.imageMessage?.jpegThumbnail ??
+        content?.videoMessage?.jpegThumbnail ??
+        content?.ptvMessage?.jpegThumbnail ??
+        content?.documentMessage?.jpegThumbnail;
+
+      if (!thumbnail?.length) return null;
+      this.validateMediaSize(thumbnail.length);
+
+      const bytes = Buffer.from(thumbnail);
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      const objectKey = buildMediaObjectKey(sha256);
+
+      return await this.assetSaves.run(sha256, async () => {
+        operation = 'thumbnail_lookup';
+        const existing = await this.storageService.getExistingObject(
+          objectKey,
+          bytes.length,
+          sha256,
+        );
+        if (existing) return existing.objectKey;
+
+        const stream = Readable.from([bytes]);
+        try {
+          operation = 'thumbnail_upload';
+          const stored = await this.storageService.uploadStream(
+            objectKey,
+            stream,
+            bytes.length,
+            'image/jpeg',
+            sha256,
+          );
+          return stored.objectKey;
+        } finally {
+          stream.destroy();
+        }
+      });
+    } catch (error) {
+      return createMediaTransferFailure('upload', operation, error);
+    }
+  }
+
   async save(
     socket: WhatsappMediaSocket,
     message: WAMessage,
-  ): Promise<StoredWhatsappMedia | null> {
-    const prepared = this.prepareMedia(message);
+  ): Promise<StoredWhatsappMedia | MediaTransferFailure | null> {
+    try {
+      const prepared = this.prepareMedia(message);
 
-    if (!prepared) {
-      return null;
+      if (!prepared) {
+        return null;
+      }
+
+      return await this.messageSaves.run(
+        JSON.stringify([prepared.chatId, prepared.messageId]),
+        () => this.processMedia(socket, message, prepared),
+      );
+    } catch (error) {
+      return createMediaTransferFailure('download', 'prepare', error);
     }
-
-    const startedAt = Date.now();
-
-    return this.messageSaves.run(
-      JSON.stringify([prepared.chatId, prepared.messageId]),
-      () => this.processMedia(socket, message, prepared, startedAt),
-    );
   }
   /**
    * Main media processing flow.
@@ -63,8 +122,7 @@ export class MediaService {
     socket: WhatsappMediaSocket,
     message: WAMessage,
     prepared: PreparedMedia,
-    startedAt: number,
-  ): Promise<StoredWhatsappMedia> {
+  ): Promise<StoredWhatsappMedia | MediaTransferFailure> {
     const { media, chatId, messageId } = prepared;
     let temporary: TemporaryMediaFile | undefined;
     let operation = 'download';
@@ -105,19 +163,16 @@ export class MediaService {
         mimeType: media.mimeType,
         originalFileName: media.originalFileName,
         sha256: temporary.sha256,
+        size: temporary.size,
       };
 
       return result;
     } catch (error) {
-      this.logger.error({
-        message: 'Media processing failed',
-        chatId,
-        messageId,
+      return createMediaTransferFailure(
+        operation === 'download' ? 'download' : 'upload',
         operation,
-        error: error instanceof Error ? error.message : String(error),
-        durationMs: Date.now() - startedAt,
-      });
-      throw error;
+        error,
+      );
     } finally {
       if (temporary) {
         await this.cleanupTemporaryDirectory(
@@ -137,6 +192,7 @@ export class MediaService {
   ): Promise<TemporaryMediaFile> {
     const directory = await mkdtemp(join(tmpdir(), 'whatsapp-media-'));
     const filePath = join(directory, 'attachment');
+    const deadline = createDownloadDeadline();
 
     try {
       const hash = createHash('sha256');
@@ -157,7 +213,7 @@ export class MediaService {
         },
       });
 
-      const download = await this.downloadMedia(socket, message);
+      const download = await this.downloadMedia(socket, message, deadline);
 
       await pipeline(
         download,
@@ -165,7 +221,9 @@ export class MediaService {
         createWriteStream(filePath, {
           flags: 'wx',
         }),
+        { signal: deadline.signal },
       );
+      deadline.signal.throwIfAborted();
 
       return {
         directory,
@@ -179,7 +237,9 @@ export class MediaService {
         force: true,
       });
 
-      throw error;
+      throw deadline.signal.aborted ? deadline.signal.reason : error;
+    } finally {
+      await deadline.dispose();
     }
   }
   /**
@@ -233,10 +293,11 @@ export class MediaService {
       });
     } catch (error) {
       this.logger.warn({
+        event: 'media_temporary_cleanup_failed',
         chatId,
         messageId,
         message: 'Temporary media cleanup failed',
-        error: error instanceof Error ? error.message : String(error),
+        error: createMediaTransferFailure('download', 'cleanup', error).error,
       });
     }
   }
@@ -262,15 +323,30 @@ export class MediaService {
   private downloadMedia(
     socket: WhatsappMediaSocket,
     message: WAMessage,
+    deadline: ReturnType<typeof createDownloadDeadline>,
   ): Promise<Readable> {
-    return downloadMediaMessage(
+    // Baileys accepts the Node fetch dispatcher at runtime, although its public
+    // options type only declares the standard DOM RequestInit fields.
+    const options = {
+      dispatcher: deadline.dispatcher,
+      signal: deadline.signal,
+    };
+    const work = downloadMediaMessage(
       message,
       'stream',
-      {},
+      {
+        // This Baileys version forwards dispatcher but omits signal in fetch.
+        options,
+      },
       {
         logger: this.baileysLogger,
-        reuploadRequest: socket.updateMediaMessage,
+        reuploadRequest: (input) =>
+          abortable(socket.updateMediaMessage(input), deadline.signal),
       },
-    );
+    ).then((stream) => {
+      if (deadline.signal.aborted) stream.destroy();
+      return stream;
+    });
+    return abortable(work, deadline.signal);
   }
 }

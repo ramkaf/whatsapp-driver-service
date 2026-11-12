@@ -1,19 +1,17 @@
-import { Inject, Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
-import { InboxService } from '../../../inbox/providers/inbox.service.ts';
+import type { Prisma } from '@database/client.js';
+import { Injectable } from '@nestjs/common';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
-/** Handles history-sync completion and pause notifications. */
 @Injectable()
-export class MessagingHistoryStatusEventHandler extends MessageEventHandler<'messaging-history.status'> {
+export class MessagingHistoryStatusEventHandler extends InboxEventHandler<'messaging-history.status'> {
   readonly event = 'messaging-history.status' as const;
-
-  constructor(
-    @Inject(InboxService) private readonly inboxService: InboxService,
-  ) {
-    super();
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
   }
-  async handle(
-    event: ConnectionMessageEvent<'messaging-history.status'>,
-  ): Promise<void> {}
+
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
+  }
 }

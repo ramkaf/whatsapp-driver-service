@@ -1,14 +1,17 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
 @Injectable()
-export class PresenceUpdateEventHandler extends MessageEventHandler<'presence.update'> {
+export class PresenceUpdateEventHandler extends InboxEventHandler<'presence.update'> {
   readonly event = 'presence.update' as const;
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
 
-  async handle(
-    _event: ConnectionMessageEvent<'presence.update'>,
-  ): Promise<void> {
-    // TODO: Handle online, typing and recording presence changes.
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

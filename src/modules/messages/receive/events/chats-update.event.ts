@@ -1,12 +1,17 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
 @Injectable()
-export class ChatsUpdateEventHandler extends MessageEventHandler<'chats.update'> {
+export class ChatsUpdateEventHandler extends InboxEventHandler<'chats.update'> {
   readonly event = 'chats.update' as const;
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
 
-  async handle(_event: ConnectionMessageEvent<'chats.update'>): Promise<void> {
-    // TODO: Apply chat metadata and unread-count changes.
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

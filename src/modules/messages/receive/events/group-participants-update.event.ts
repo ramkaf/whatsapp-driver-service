@@ -1,14 +1,19 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
+/** Handles add/remove/promote/demote/modify; Baileys emits remove for both leave and removal. */
 @Injectable()
-export class GroupParticipantsUpdateEventHandler extends MessageEventHandler<'group-participants.update'> {
+export class GroupParticipantsUpdateEventHandler extends InboxEventHandler<'group-participants.update'> {
   readonly event = 'group-participants.update' as const;
 
-  async handle(
-    _event: ConnectionMessageEvent<'group-participants.update'>,
-  ): Promise<void> {
-    // TODO: Handle member additions, removals and admin-role changes.
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
+
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

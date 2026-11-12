@@ -306,6 +306,153 @@ reconnect action or `/reconnect` to resume with stored credentials. A logged-out
 session still requires explicit pairing. Socket/authentication cleanup failures
 return 503 while the session remains disabled.
 
+## Receiving events into the inbox
+
+Every event in `MESSAGE_EVENTS` has a typed handler. The handlers share
+`InboxEventHandler`, which normalizes each event through `toInboxEntries` and
+passes individual entries to `InboxService`. The service only inserts normalized
+records; Baileys payload extraction, filtering and media detection live in the
+receiving adapter. Override a handler when its event needs additional behavior.
+
+Currently only `messages.upsert` is enabled for inbox writes. All other handlers
+return `false` from `shouldHandle`; they remain registered for routing and realtime
+publication. Enable an event by changing its handler's predicate.
+
+`whatsapp_message_inbox.event` records the source event name, such as
+`messages.upsert`, `messages.reaction` or `message-receipt.update`. Existing rows
+are labeled `legacy.message`: their original live/history source is unknown.
+The migration preserves every existing key and payload.
+
+`payload` keeps the original serialized item. Each handler's `normalizePayload`
+output is stored separately in the nullable JSON column `reformPayload`. Existing
+records are not backfilled. The media worker continues reading the original
+payload, so reforming a message does not remove its download metadata or bytes.
+For `messages.upsert`, `shouldHandle` rejects own messages and reactions
+(including wrapped/encrypted reactions); `reformPayload` contains
+`conversationId`, `messageId`, `content` and `media`. Content is the text or
+attachment caption, or `null` when neither exists. The former `mediaUrl` field is
+replaced by `media: { path: null, thumbnail: null, mimeType: null }`.
+Dedicated `messages.reaction` events still use their own handler.
+
+The separate nullable JSON column `WhatsappMessageInbox.media` is filled by the
+existing media worker after upload. It contains `path` (the durable MinIO object
+key), `mimeType`, `thumbnail` and `type` (`PDF`, `VOICE`, `MUSIC`, `VIDEO`, `PHOTO`
+or `FILE`). PDFs are identified by their MIME type; other documents and stickers
+use `FILE`. An embedded JPEG thumbnail is uploaded to MinIO and `thumbnail`
+stores its durable object key; absent thumbnails stay `null`. Thumbnail uploads
+use the same content hash and duplicate suppression as attachments. A thumbnail
+upload failure keeps the record eligible for the existing retry flow. No thumbnail
+generation or merge into `reformPayload` is performed. Messages without media and
+existing rows keep this column `NULL`; existing data URI values are not backfilled.
+
+Upsert reform payloads also include `chatType` (`group`, `private`, or `other`
+for broadcasts/channels) and `sender`: `whatsappId`, `username`, `phoneNumber`,
+and `displayName`. Group senders come from participant metadata; personal chat
+senders come from the remote JID. Phone numbers include a leading `+` and are
+extracted only from phone JIDs, including alternate JIDs. LID values are never
+treated as phone numbers. Missing sender fields remain `null`; usernames and
+display names are distinct. Baileys key extensions survive protobuf restoration.
+
+Message keys remain `SHA256(remoteJid + ':' + messageId)`, without the session
+or event name. Eight accounts receiving the same message, including later history
+replay, share one row. The first successful insert retains its source event,
+payload and session. Own messages and messages missing an ID/JID are still skipped.
+The stored session is needed to locate a socket for media download, even before
+outbound messaging is implemented.
+
+Group events use the same `shouldHandle` -> `normalizePayload` -> inbox path:
+
+| Event | Changes |
+| --- | --- |
+| `group-participants.update` | `add`, `remove`, `promote`, `demote`, `modify` |
+| `groups.update` | Name, description, invite link and group permissions |
+| `groups.upsert` | Newly discovered group metadata |
+| `group.join-request` | `created`, `revoked`, `rejected` join requests |
+| `group.member-tag.update` | A member's label within a group |
+
+The installed Baileys version emits `action: 'remove'` for both voluntary leave
+and removal by another member. The adapter preserves `author` and `participants`
+without inventing a separate native leave event. Raw message stubs, when received
+through `messages.upsert`, retain their original `messageStubType` in the payload.
+
+Other events use a separate fingerprint of their event name and canonical JSON
+payload, excluding the receive envelope's session and local timestamp. Object
+property order does not change the fingerprint. Source reaction/receipt timestamps,
+actors and state changes remain in the payload. Arrays are split per item;
+message-deletion batches are split per deleted key. Whole-chat deletion retains
+its `{ jid, all: true }` payload. Bytes use Baileys BufferJSON serialization.
+
+This is content deduplication for notifications, not a complete occurrence log:
+two independent notifications with identical payloads and no source identifier or
+timestamp cannot be distinguished. For example, repeated presence states will
+share a row. Account-relative differences or different JID representations in
+notification payloads are not reconciled by this adapter.
+
+Inbox insertion uses `createMany` with `skipDuplicates` and the existing unique
+key constraint, so simultaneous deliveries do not overwrite processing state.
+Only live/history messages with actual attachments enter the media queue; other
+events are `READY` with `NOT_REQUIRED` media status. The media worker also accepts
+legacy message rows.
+
+Media transfer failures are returned as data by `MediaService.save` and
+`saveThumbnail`; callers must check `isMediaTransferFailure` before using their
+results. The initial `inbox-media` worker processes `PENDING` media. A separate
+`inbox-media-retry` worker polls every second for due retries, using persisted
+`mediaAttemptCount` and `mediaNextAttemptAt`. Polling and queue load can delay a
+due attempt; the schedule is a minimum wait, not an exact wall-clock guarantee.
+
+| Failed attempt | Wait before the next attempt |
+| --- | --- |
+| Initial attempt (1) | 5 seconds |
+| Retry 1 (2) | 15 seconds |
+| Retry 2 (3) | 2 minutes |
+| Retry 3 (4) | 30 minutes |
+| Retry 4 (5) | 3 hours |
+| Retry 5 (6) | 24 hours |
+| Retry 6 (7) | Stop; no further automatic attempts |
+
+Delays start after each failed attempt. Download/socket failures set
+`DOWNLOAD_FAILED`; MinIO lookup, upload, signing, and thumbnail failures set
+`UPLOAD_FAILED`. Unexpected processing errors retain the legacy `FAILED` status
+and use the same retry budget. After seven failed attempts, media becomes
+`EXHAUSTED`, the inbox becomes `FAILED`, and the next attempt time is cleared.
+Successful transfer of the attachment and its embedded thumbnail sets `UPLOADED`
+and `READY`, and clears the last error and retry schedule. Successful records are
+never selected for automatic retries.
+
+Claims atomically increment the attempt counter and acquire a unique ownership
+token with a 15-minute lease. The retry worker recovers expired attempts after a
+process crash using the same remaining retry budget. Token-guarded writes prevent
+an old attempt from overwriting a newer one. The migration initializes existing
+`FAILED` rows as one failed initial attempt and makes existing `PROCESSING` rows
+recoverable; their older unrecorded attempt history cannot be reconstructed.
+
+WhatsApp downloads have a two-minute deadline covering connection, headers,
+reupload callbacks and streamed content. MinIO HTTP requests also have a
+two-minute deadline covering DNS through the response body. Timed-out network
+requests are canceled and retried through the inbox schedule. The MinIO SDK's
+internal retries are disabled so they do not add a second retry schedule.
+
+Each retry downloads the attachment again because temporary files are cleaned
+after each attempt. Matching objects already in MinIO are reused; an uploaded
+file whose signing or thumbnail step failed is not uploaded again when integrity
+checks succeed. This flow does not retain a durable local download spool.
+
+Monitoring events are `media_attempt_started`, `media_retry_scheduled`,
+`media_uploaded`, `media_retry_succeeded`, `media_retry_exhausted`,
+`media_worker_error`, and `media_worker_poll_failed`. Transfer logs include the
+inbox/session, attempt/max attempts, failed service (`whatsapp`, `minio`, or
+`worker`), operation, error code, duration, retry delay, and next UTC attempt time.
+Scheduled failures use WARN, final failures and database/worker errors use ERROR,
+and successful attempts use LOG. URLs and credentials are redacted from persisted
+and logged error text. These logs describe actual transfer outcomes; they do not
+probe connectivity while the queues are idle.
+
+Each batch continues after individual database failures and reports an aggregate
+failure to the receiving service, which logs it with its session and event. This
+does not add durable retry for failed inserts; data is durable only after the
+inbox write succeeds.
+
 ## Validation and operations
 
 ```bash

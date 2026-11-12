@@ -1,12 +1,17 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
 @Injectable()
-export class ChatsDeleteEventHandler extends MessageEventHandler<'chats.delete'> {
+export class ChatsDeleteEventHandler extends InboxEventHandler<'chats.delete'> {
   readonly event = 'chats.delete' as const;
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
 
-  async handle(_event: ConnectionMessageEvent<'chats.delete'>): Promise<void> {
-    // TODO: Handle deleted chat identifiers.
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

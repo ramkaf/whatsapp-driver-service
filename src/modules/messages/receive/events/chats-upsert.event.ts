@@ -1,12 +1,17 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
 @Injectable()
-export class ChatsUpsertEventHandler extends MessageEventHandler<'chats.upsert'> {
+export class ChatsUpsertEventHandler extends InboxEventHandler<'chats.upsert'> {
   readonly event = 'chats.upsert' as const;
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
 
-  async handle(_event: ConnectionMessageEvent<'chats.upsert'>): Promise<void> {
-    // TODO: Persist newly discovered chats.
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

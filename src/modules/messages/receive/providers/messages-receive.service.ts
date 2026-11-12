@@ -39,13 +39,14 @@ export class MessagesReceiveService implements OnModuleInit, OnModuleDestroy {
     if (!handler) return;
     try {
       await handler.handle(event);
-    } catch {
+    } catch (error) {
       // A bad payload or output failure must not interrupt another session's socket.
-      // this.logger.error({
-      //   sessionId: event.sessionId,
-      //   event: event.event,
-      //   reason: 'message_handler_failed',
-      // });
+      this.logger.error({
+        sessionId: event.sessionId,
+        event: event.event,
+        reason: 'message_handler_failed',
+        error,
+      });
     }
   }
 

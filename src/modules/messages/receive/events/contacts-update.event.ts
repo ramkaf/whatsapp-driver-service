@@ -1,14 +1,17 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
 @Injectable()
-export class ContactsUpdateEventHandler extends MessageEventHandler<'contacts.update'> {
+export class ContactsUpdateEventHandler extends InboxEventHandler<'contacts.update'> {
   readonly event = 'contacts.update' as const;
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
 
-  async handle(
-    _event: ConnectionMessageEvent<'contacts.update'>,
-  ): Promise<void> {
-    // TODO: Apply contact name and profile changes.
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }

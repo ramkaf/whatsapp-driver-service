@@ -1,10 +1,12 @@
-import { Logger } from '@nestjs/common';
-import type { MockInstance } from 'vitest';
 import { InboxRepository, type PrismaService } from '@libs/prisma';
 import type { Prisma } from '@database/client.js';
 import type { WAMessage } from '@whiskeysockets/baileys';
 import { InboxService } from '../providers/inbox.service.ts';
-import { deserializeInboxMessage } from '../utils/inbox.util.ts';
+import {
+  deserializeInboxMessage,
+  generateMessageFingerprint,
+} from '../utils/inbox.util.ts';
+import { toInboxEntries } from '../../messages/receive/utils/message-inbox-entry.util.ts';
 
 const key = {
   remoteJid: 'chat@s.whatsapp.net',
@@ -13,66 +15,69 @@ const key = {
 };
 
 describe('InboxService', () => {
-  let upsert: ReturnType<typeof vi.fn>;
+  let createMany: ReturnType<typeof vi.fn>;
   let inbox: InboxService;
-  let loggedError: MockInstance;
 
   beforeEach(() => {
-    vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
-    loggedError = vi
-      .spyOn(Logger.prototype, 'error')
-      .mockImplementation(() => {});
-    upsert = vi.fn().mockResolvedValue({});
+    createMany = vi.fn().mockResolvedValue({ count: 1 });
     inbox = new InboxService(
       new InboxRepository({
-        whatsappMessageInbox: { upsert },
+        whatsappMessageInbox: { createMany },
       } as unknown as PrismaService),
     );
   });
-  afterEach(() => vi.restoreAllMocks());
 
-  it('stores plain text ready for downstream processing under the originating session', async () => {
-    const message: WAMessage = {
-      key,
-      message: { conversation: 'پیام بدون فایل' },
-    };
-    await inbox.handle(message, 'account-one');
-    expect(upsert).toHaveBeenCalledExactlyOnceWith({
-      where: { key: expect.any(String) },
-      create: {
-        key: expect.any(String),
-        payload: message,
-        sessionId: 'account-one',
-        haveMedia: false,
-        mediaStatus: 'NOT_REQUIRED',
-        status: 'READY',
-        temp: 'undefined:پیام بدون فایل',
-      },
-      update: {},
+  async function receive(message: WAMessage, sessionId = 'account-one') {
+    for (const entry of toInboxEntries({
+      event: 'messages.upsert',
+      sessionId,
+      at: '',
+      data: { messages: [message], type: 'notify' },
+    }))
+      await inbox.handle(entry);
+  }
+
+  it('stores plain text with its event and the original message fingerprint', async () => {
+    const message = { key, message: { conversation: 'پیام بدون فایل' } };
+    await receive(message);
+    expect(createMany).toHaveBeenCalledExactlyOnceWith({
+      data: [
+        {
+          key: generateMessageFingerprint(key.remoteJid, key.id),
+          event: 'messages.upsert',
+          payload: message,
+          sessionId: 'account-one',
+          haveMedia: false,
+          mediaStatus: 'NOT_REQUIRED',
+          status: 'READY',
+        },
+      ],
+      skipDuplicates: true,
     });
   });
 
   it('queues wrapped media while preserving the bytes needed for a later download', async () => {
     const mediaKey = new Uint8Array([0, 1, 128, 255]);
-    const message: WAMessage = {
-      key,
-      message: {
-        viewOnceMessageV2: {
-          message: { imageMessage: { mediaKey, mimetype: 'image/jpeg' } },
+    await receive(
+      {
+        key,
+        message: {
+          viewOnceMessageV2: {
+            message: { imageMessage: { mediaKey, mimetype: 'image/jpeg' } },
+          },
         },
       },
-    };
-    await inbox.handle(message, 'account-two');
-    const { create } = upsert.mock
-      .calls[0][0] as Prisma.WhatsappMessageInboxUpsertArgs;
-    expect(create).toMatchObject({
+      'account-two',
+    );
+    const record = createMany.mock.calls[0][0].data[0];
+    expect(record).toMatchObject({
       sessionId: 'account-two',
       haveMedia: true,
       mediaStatus: 'PENDING',
       status: 'RECEIVED',
     });
     const restored = deserializeInboxMessage(
-      create.payload as Prisma.JsonValue,
+      record.payload as Prisma.JsonValue,
     );
     expect(
       Buffer.from(
@@ -86,50 +91,77 @@ describe('InboxService', () => {
     { ...key, id: undefined },
     { ...key, remoteJid: undefined },
   ])(
-    'does not insert own messages or messages missing required identifiers: %j',
+    'does not insert own messages or incomplete keys: %j',
     async (messageKey) => {
-      await inbox.handle(
-        { key: messageKey, message: { conversation: 'hello' } },
-        'account-one',
-      );
-      expect(upsert).not.toHaveBeenCalled();
+      await receive({ key: messageKey, message: { conversation: 'hello' } });
+      expect(createMany).not.toHaveBeenCalled();
     },
   );
 
-  it('deduplicates re-deliveries without resetting a previously processed record', async () => {
-    const first: WAMessage = { key, message: { conversation: 'original' } };
-    await inbox.handle(first, 'account-one');
-    await inbox.handle(
-      { ...first, message: { conversation: 're-delivery' } },
-      'account-one',
+  it('retains one processed record across eight simultaneous sessions and history replay', async () => {
+    const rows = new Map<string, Record<string, unknown>>();
+    createMany.mockImplementation(async ({ data, skipDuplicates }) => {
+      expect(skipDuplicates).toBe(true);
+      for (const entry of data) {
+        if (!rows.has(entry.key))
+          rows.set(entry.key, { ...entry, status: 'PROCESSED' });
+      }
+      return { count: 1 };
+    });
+    const message = { key, message: { conversation: 'original' } };
+    await Promise.all(
+      Array.from({ length: 8 }, (_, i) => receive(message, `account-${i}`)),
     );
-    const [initial, repeated] = upsert.mock.calls.map(
-      ([query]) => query as Prisma.WhatsappMessageInboxUpsertArgs,
-    );
-    expect(initial.where.key).toBe(initial.create.key);
-    expect(repeated.where).toEqual(initial.where);
-    expect(repeated.update).toEqual({});
-    await inbox.handle(
-      { ...first, key: { ...key, remoteJid: 'other@s.whatsapp.net' } },
-      'account-one',
-    );
-    expect(upsert.mock.calls[2][0].where.key).not.toBe(initial.where.key);
+    const original = rows.values().next().value;
+    for (const entry of toInboxEntries({
+      event: 'messaging-history.set',
+      sessionId: 'history-account',
+      at: '',
+      data: { messages: [message], chats: [], contacts: [] },
+    }))
+      await inbox.handle(entry);
+    expect(rows.size).toBe(1);
+    expect(rows.values().next().value).toBe(original);
+    expect(original).toMatchObject({
+      sessionId: 'account-0',
+      status: 'PROCESSED',
+      event: 'messages.upsert',
+    });
+    await receive({
+      ...message,
+      key: { ...key, remoteJid: 'other@s.whatsapp.net' },
+    });
+    expect(rows.size).toBe(2);
   });
 
-  it('contains persistence failures so the socket consumer can continue', async () => {
+  it('stores reactions as ready notifications without scheduling a media download', async () => {
+    const reaction = { key, reaction: { text: '👍', senderTimestampMs: 123 } };
+    const [entry] = toInboxEntries({
+      event: 'messages.reaction',
+      sessionId: 'account-one',
+      at: '',
+      data: [reaction],
+    });
+    await inbox.handle(entry);
+    expect(createMany.mock.calls[0][0].data[0]).toMatchObject({
+      event: 'messages.reaction',
+      payload: reaction,
+      haveMedia: false,
+      mediaStatus: 'NOT_REQUIRED',
+      status: 'READY',
+    });
+  });
+
+  it('propagates persistence failures for the receiving boundary to report', async () => {
     const failure = new Error('database unavailable');
-    upsert.mockRejectedValueOnce(failure);
+    createMany.mockRejectedValueOnce(failure);
     await expect(
-      inbox.handle({ key, message: { conversation: 'hello' } }, 'account-one'),
-    ).resolves.toBeUndefined();
-    expect(loggedError).toHaveBeenCalledWith(
-      'Failed to save incoming WhatsApp message',
-      failure.stack,
-    );
-    await inbox.handle(
-      { key: { ...key, id: 'second' }, message: { conversation: 'next' } },
-      'account-one',
-    );
-    expect(upsert).toHaveBeenCalledTimes(2);
+      receive({ key, message: { conversation: 'hello' } }),
+    ).rejects.toBe(failure);
+    await receive({
+      key: { ...key, id: 'second' },
+      message: { conversation: 'next' },
+    });
+    expect(createMany).toHaveBeenCalledTimes(2);
   });
 });

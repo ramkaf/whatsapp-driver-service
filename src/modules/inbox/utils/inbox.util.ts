@@ -11,7 +11,9 @@ export function generateMessageFingerprint(
 }
 
 /** Restores protobuf bytes and timestamps after a message has passed through JSON. */
-export function deserializeInboxMessage(payload: Prisma.JsonValue): WAMessage {
+export function deserializeInboxMessage(
+  payload: Prisma.JsonValue | Prisma.InputJsonValue,
+): WAMessage {
   const message = JSON.parse(JSON.stringify(payload), (key, value: unknown) => {
     // Older inbox records may contain Node's default Buffer JSON format.
     if (
@@ -32,5 +34,9 @@ export function deserializeInboxMessage(payload: Prisma.JsonValue): WAMessage {
     throw new Error('Inbox payload is missing the WhatsApp message key');
   }
 
-  return Object.assign(restored, { key: restored.key });
+  // Baileys augments protobuf keys with alternate JIDs and usernames. Protobuf
+  // conversion drops those extensions, so restore the original key metadata.
+  return Object.assign(restored, {
+    key: Object.assign(restored.key, message.key),
+  });
 }

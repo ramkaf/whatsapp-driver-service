@@ -3,6 +3,7 @@ import type { WAMessage } from '@whiskeysockets/baileys';
 import { ConnectionMessageSource } from '../../../connection/interfaces/message-event-source.ts';
 import { MediaService } from '../../../media/providers/media.service.ts';
 import type { ReceivedMessageEvent } from '../interfaces/message-event-output.ts';
+import { isMediaTransferFailure } from '../../../media/utils/media-transfer-failure.util.ts';
 
 /** Stores an attachment before its message is written to the receiving output. */
 @Injectable()
@@ -24,6 +25,15 @@ export class MessageMediaService {
       const context = this.source.getMediaDownloadContext(sessionId);
       if (!context) throw new Error('Session media connection is unavailable');
       const media = await this.media.save(context, message);
+      if (isMediaTransferFailure(media)) {
+        this.logger.warn({
+          sessionId,
+          messageId: message.key.id,
+          reason: 'media_storage_failed',
+          ...media,
+        });
+        return { mediaError: 'MEDIA_STORAGE_FAILED' };
+      }
       return media ? { media } : {};
     } catch {
       this.logger.error({

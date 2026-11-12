@@ -1,14 +1,18 @@
+import type { Prisma } from '@database/client.js';
 import { Injectable } from '@nestjs/common';
-import type { ConnectionMessageEvent } from '../../../connection/interfaces/message-event-source.ts';
-import { MessageEventHandler } from '../interfaces/message-event-handler.ts';
+import { InboxEventHandler } from '../interfaces/inbox-event-handler.ts';
 
+/** Receives created, revoked and rejected membership requests. */
 @Injectable()
-export class GroupJoinRequestEventHandler extends MessageEventHandler<'group.join-request'> {
+export class GroupJoinRequestEventHandler extends InboxEventHandler<'group.join-request'> {
   readonly event = 'group.join-request' as const;
+  protected shouldHandle(_payload: Prisma.InputJsonValue): boolean {
+    return false;
+  }
 
-  async handle(
-    _event: ConnectionMessageEvent<'group.join-request'>,
-  ): Promise<void> {
-    // TODO: Handle group membership requests.
+  protected normalizePayload(
+    payload: Prisma.InputJsonValue,
+  ): Prisma.InputJsonValue {
+    return payload;
   }
 }
