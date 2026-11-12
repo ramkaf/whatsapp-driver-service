@@ -112,6 +112,7 @@ nav:
       - Boilerplate: backend/boilerplate.md
       - Libs: backend/libs.md
       - RabbitMQ: backend/rabbitmq.md
+      - MinIO: backend/minio.md
 
   - Management:
       - Home: management/index.md 

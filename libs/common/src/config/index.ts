@@ -6,3 +6,4 @@ export * from './db/database.config.ts';
 export * from './db/database.env.ts';
 export * from './redis/redis.config.ts';
 export * from './redis/redis.env.ts';
+export * from './minio/index.ts';
