@@ -4,7 +4,6 @@ import type { Prisma } from '@database/client.js';
 import { InboxService } from '../../../inbox/providers/inbox.service.ts';
 import {
   deserializeInboxMessage,
-  generateMessageFingerprint,
 } from '../../../inbox/utils/inbox.util.ts';
 import { MessagesUpsertEventHandler } from '../events/message-upsert/messages-upsert.event.ts';
 import { MessageChatType } from '../events/message-upsert/utils/message-upsert.util.ts';

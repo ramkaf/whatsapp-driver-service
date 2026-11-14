@@ -1,5 +1,4 @@
 import {
-  isJidGroup,
   jidDecode,
   jidNormalizedUser,
   type WAMessage,

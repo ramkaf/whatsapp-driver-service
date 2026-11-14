@@ -1,6 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import type { IAppConfig } from '@libs/common';
 import { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
 import { ConfigService } from '@nestjs/config';
 

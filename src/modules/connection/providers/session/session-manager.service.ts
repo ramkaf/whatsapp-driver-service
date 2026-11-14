@@ -21,7 +21,6 @@ import type {
   AuthenticationCreds,
   WASocket,
 } from '@whiskeysockets/baileys';
-import type { IAppConfig } from '@libs/common';
 import { SessionRuntimeService } from './session-runtime.service.ts';
 import { SocketLifecycleService } from '../socket/socket-lifecycle.service.ts';
 import type {
