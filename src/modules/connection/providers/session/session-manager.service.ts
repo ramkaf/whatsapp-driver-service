@@ -8,7 +8,6 @@ import {
   ConflictException,
   Inject,
   Injectable,
-  Logger,
   ServiceUnavailableException,
   HttpException,
   HttpStatus,
@@ -39,13 +38,17 @@ import { CONNECTION_REASONS } from '../../interfaces/connection-status.ts';
 import { PairingMethodEnum } from '../../../sessions/interfaces/session.interface.ts';
 import { classifyDisconnect } from '../../utils/disconnect-classifier.util.ts';
 import { ConfigService } from '@nestjs/config';
+import {
+  ConnectionSessionLogService,
+  type ConnectionSessionLogger,
+} from '../logging/connection-session-log.service.ts';
 
 // Orchestrates serialized session commands, pairing, and connection recovery.
 @Injectable()
 export class SessionManagerService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
-  private readonly logger = new Logger(SessionManagerService.name);
+  private readonly logger: ConnectionSessionLogger;
   private readonly runtimes = new Map<string, SessionRuntime>();
   private readonly queue = new SessionQueue();
   private readonly phones = new SessionQueue();
@@ -62,10 +65,15 @@ export class SessionManagerService
     @Inject(SocketFactoryService)
     private readonly factory: SessionSocketFactory,
     private readonly supervisor: ConnectionSupervisorService,
-    private readonly configService:ConfigService,
+    private readonly configService: ConfigService,
     private readonly runtimeState: SessionRuntimeService,
     private readonly lifecycle: SocketLifecycleService,
-  ) {}
+    private readonly logs: ConnectionSessionLogService,
+  ) {
+    this.logger = logs.createLogger(SessionManagerService.name, (sessionId) =>
+      this.runtimes.get(sessionId),
+    );
+  }
 
   private runtime(row: WaSession): SessionRuntime {
     this.sessionPhones.set(row.id, row.phone);
@@ -121,74 +129,104 @@ export class SessionManagerService
         }),
       );
     const phone = this.sessionPhones.get(id);
-    if (phone) return enqueue(phone);
-    return this.repository.require(id).then((row) => enqueue(row.phone));
+    const command = phone
+      ? enqueue(phone)
+      : this.repository.require(id).then((row) => enqueue(row.phone));
+    return command.catch((error: unknown) => {
+      this.logger.exception(
+        { sessionId: id, event: 'session_command_failed' },
+        error,
+      );
+      throw error;
+    });
   }
 
   async replace(
     data: Pick<WaSession, 'name' | 'phone' | 'pairingMethod'>,
     maxSessions: number,
   ): Promise<WaSession> {
-    return this.phones.run(data.phone, async () => {
-      if (this.stopping)
-        throw new ServiceUnavailableException('Application is shutting down');
-      const existing = await this.repository.currentByPhone(data.phone);
-      const count = await this.repository.countEnabledSessions();
-      if (count - (existing?.isEnabled ? 1 : 0) >= maxSessions)
-        throw new ConflictException('Session limit reached');
-      const previous = existing ? this.runtimes.get(existing.id) : undefined;
-      const resumePrevious = existing?.isEnabled && !previous?.intentionalStop;
-      if (previous) {
-        await this.queue.run(previous.sessionId, async () => {
-          previous.intentionalStop = true;
-          try {
-            await this.lifecycle.teardown(previous);
-          } catch {
-            await this.failLocked(
-              previous,
-              'Authentication cleanup failed during replacement',
-            );
-            throw new ServiceUnavailableException(
-              'Authentication cleanup failed; replacement aborted',
-            );
-          }
-          this.runtimeState.state(previous, 'DISCONNECTED');
-        });
-      }
-      let row: WaSession;
-      try {
-        row = await this.repository.replaceCurrent(data, maxSessions);
-      } catch (error) {
-        // A failed insert rolls back retirement; restore the previous account's socket.
-        if (previous && resumePrevious) {
-          previous.intentionalStop = false;
-          try {
-            await this.queue.run(previous.sessionId, () =>
-              this.startLocked(previous),
-            );
-          } catch {
-            this.logger.error({
+    return this.phones
+      .run(data.phone, async () => {
+        if (this.stopping)
+          throw new ServiceUnavailableException('Application is shutting down');
+        const existing = await this.repository.currentByPhone(data.phone);
+        const count = await this.repository.countEnabledSessions();
+        if (count - (existing?.isEnabled ? 1 : 0) >= maxSessions)
+          throw new ConflictException('Session limit reached');
+        const previous = existing ? this.runtimes.get(existing.id) : undefined;
+        const resumePrevious =
+          existing?.isEnabled && !previous?.intentionalStop;
+        if (previous) {
+          await this.queue.run(previous.sessionId, async () => {
+            this.logger.log({
               sessionId: previous.sessionId,
-              event: 'replacement_restore_failed',
+              event: 'session_replacement_started',
             });
-          }
+            previous.intentionalStop = true;
+            try {
+              await this.lifecycle.teardown(previous);
+            } catch (error) {
+              await this.failLocked(
+                previous,
+                'Authentication cleanup failed during replacement',
+                error,
+              );
+              throw new ServiceUnavailableException(
+                'Authentication cleanup failed; replacement aborted',
+              );
+            }
+            this.runtimeState.state(previous, 'DISCONNECTED');
+          });
         }
+        let row: WaSession;
+        try {
+          row = await this.repository.replaceCurrent(data, maxSessions);
+        } catch (error) {
+          // A failed insert rolls back retirement; restore the previous account's socket.
+          if (previous && resumePrevious) {
+            previous.intentionalStop = false;
+            try {
+              await this.queue.run(previous.sessionId, () =>
+                this.startLocked(previous),
+              );
+            } catch (restoreError) {
+              this.logger.exception(
+                {
+                  sessionId: previous.sessionId,
+                  event: 'replacement_restore_failed',
+                },
+                restoreError,
+              );
+            }
+          }
+          throw error;
+        }
+        if (existing) {
+          this.runtimes.delete(existing.id);
+          this.sessionPhones.delete(existing.id);
+        }
+        try {
+          await this.queue.run(row.id, () =>
+            this.startLocked(this.runtime(row)),
+          );
+        } catch (error) {
+          this.logger.warn(
+            {
+              sessionId: row.id,
+              event: 'initial_connection_failed',
+            },
+            error,
+          );
+        }
+        return row;
+      })
+      .catch((error: unknown) => {
+        this.logger.exception(
+          { event: 'session_replacement_failed', phone: data.phone },
+          error,
+        );
         throw error;
-      }
-      if (existing) {
-        this.runtimes.delete(existing.id);
-        this.sessionPhones.delete(existing.id);
-      }
-      try {
-        await this.queue.run(row.id, () => this.startLocked(this.runtime(row)));
-      } catch {
-        this.logger.warn({
-          sessionId: row.id,
-          event: 'initial_connection_failed',
-        });
-      }
-      return row;
-    });
+      });
   }
 
   private current(runtime: SessionRuntime, generation: number): boolean {
@@ -235,11 +273,12 @@ export class SessionManagerService
       'CONNECTION_STARTED',
     );
     try {
-      const auth = await this.authStore.open(runtime.sessionId, () => {
+      const auth = await this.authStore.open(runtime.sessionId, (error) => {
         this.enqueueFailure(
           runtime,
           generation,
           'Authentication persistence failed',
+          error,
         );
       });
       if (!this.current(runtime, generation)) {
@@ -252,6 +291,7 @@ export class SessionManagerService
         auth.state,
         Number(this.configService.getOrThrow('WA_PAIRING_TTL_MS')),
         () => this.current(runtime, generation) && !!runtime.socket?.ws.isOpen,
+        () => runtime,
       );
       runtime.socket = socket;
       const credsUpdated = (update: Partial<AuthenticationCreds>) => {
@@ -259,11 +299,12 @@ export class SessionManagerService
         Object.assign(auth.state.creds, update);
         void auth
           .saveCreds()
-          .catch(() =>
+          .catch((error: unknown) =>
             this.enqueueFailure(
               runtime,
               generation,
               'Authentication persistence failed',
+              error,
             ),
           );
       };
@@ -273,17 +314,21 @@ export class SessionManagerService
           if (!this.current(runtime, generation)) return;
           try {
             await this.handle(runtime, update);
-          } catch {
+          } catch (error) {
             await this.failLocked(
               runtime,
               'Connection state or authentication persistence failed',
+              error,
             );
           }
-        }).catch(() =>
-          this.logger.error({
-            sessionId: runtime.sessionId,
-            event: 'connection_event_failed',
-          }),
+        }).catch((error: unknown) =>
+          this.logger.exception(
+            {
+              sessionId: runtime.sessionId,
+              event: 'connection_event_failed',
+            },
+            error,
+          ),
         );
       };
       socket.ev.on('creds.update', credsUpdated);
@@ -298,8 +343,8 @@ export class SessionManagerService
         generation,
         event: 'socket_created',
       });
-    } catch {
-      await this.failLocked(runtime, 'Session initialization failed');
+    } catch (error) {
+      await this.failLocked(runtime, 'Session initialization failed', error);
       throw new ServiceUnavailableException('Session initialization failed');
     }
   }
@@ -308,36 +353,55 @@ export class SessionManagerService
     runtime: SessionRuntime,
     generation: number,
     reason: string,
+    error?: unknown,
   ): void {
-    this.logger.error({
-      sessionId: runtime.sessionId,
-      event: 'session_failure',
-      reason,
-    });
+    this.logger.error(
+      {
+        sessionId: runtime.sessionId,
+        event: 'session_failure',
+        reason,
+      },
+      error,
+    );
     void this.command(runtime.sessionId, async () => {
       if (this.current(runtime, generation))
-        await this.failLocked(runtime, reason);
-    }).catch(() =>
-      this.logger.error({
-        sessionId: runtime.sessionId,
-        event: 'failure_state_write_failed',
-      }),
+        await this.failLocked(runtime, reason, error);
+    }).catch((writeError: unknown) =>
+      this.logger.exception(
+        {
+          sessionId: runtime.sessionId,
+          event: 'failure_state_write_failed',
+        },
+        writeError,
+      ),
     );
   }
 
   private async failLocked(
     runtime: SessionRuntime,
     reason: string,
+    error?: unknown,
   ): Promise<void> {
     runtime.reason = CONNECTION_REASONS.INTERNAL_ERROR;
     runtime.intentionalStop = true;
+    this.logger.error(
+      {
+        sessionId: runtime.sessionId,
+        event: 'session_failed',
+        reason,
+      },
+      error,
+    );
     try {
       await this.lifecycle.teardown(runtime);
-    } catch {
-      this.logger.error({
-        sessionId: runtime.sessionId,
-        event: 'cleanup_failed',
-      });
+    } catch (cleanupError) {
+      this.logger.exception(
+        {
+          sessionId: runtime.sessionId,
+          event: 'cleanup_failed',
+        },
+        cleanupError,
+      );
     }
     this.runtimeState.state(runtime, 'FAILED');
     await this.repository.transition(
@@ -357,8 +421,14 @@ export class SessionManagerService
       runtime.pairingReady = true;
       runtime.qr = {
         value: update.qr,
-        expiresAt: Date.now() + Number(this.configService.getOrThrow('WA_PAIRING_TTL_MS'))
+        expiresAt:
+          Date.now() +
+          Number(this.configService.getOrThrow('WA_PAIRING_TTL_MS')),
       };
+      this.logger.log({
+        sessionId: runtime.sessionId,
+        event: 'pairing_qr_issued',
+      });
       this.runtimeState.state(runtime, 'AWAITING_PAIRING');
       await this.repository.updateCurrent(runtime.sessionId, {
         status: 'AWAITING_PAIRING',
@@ -413,6 +483,14 @@ export class SessionManagerService
         decision.reason,
         decision.code,
       );
+      this.logger.warn(
+        {
+          sessionId: runtime.sessionId,
+          event: 'disconnected',
+          ...decision,
+        },
+        update.lastDisconnect?.error,
+      );
       await this.lifecycle.teardown(runtime);
       const status =
         decision.action === DisconnectAction.LOGOUT
@@ -442,11 +520,6 @@ export class SessionManagerService
           code: decision.code,
         },
       );
-      this.logger.warn({
-        sessionId: runtime.sessionId,
-        event: 'disconnected',
-        ...decision,
-      });
       if (['LOGGED_OUT', 'FAILED', 'EXPIRED'].includes(status)) {
         runtime.intentionalStop = true;
         return;
@@ -483,6 +556,12 @@ export class SessionManagerService
         nextRetryAt: new Date(runtime.nextRetryAt).toISOString(),
       },
     );
+    this.logger.retry({
+      sessionId: runtime.sessionId,
+      event: 'reconnect_scheduled',
+      delayMs: milliseconds,
+      restartRequired,
+    });
     const generation = runtime.generation;
     runtime.reconnectTimer = setTimeout(() => {
       void this.queue
@@ -491,11 +570,14 @@ export class SessionManagerService
           this.lifecycle.cancelRetry(runtime);
           await this.startLocked(runtime);
         })
-        .catch(() =>
-          this.logger.error({
-            sessionId: runtime.sessionId,
-            event: 'reconnect_failed',
-          }),
+        .catch((error: unknown) =>
+          this.logger.exception(
+            {
+              sessionId: runtime.sessionId,
+              event: 'reconnect_failed',
+            },
+            error,
+          ),
         );
     }, milliseconds);
     runtime.reconnectTimer.unref();
@@ -509,6 +591,7 @@ export class SessionManagerService
       if (row.status === 'LOGGED_OUT')
         throw new ConflictException('Pairing is required after logout');
       const runtime = this.runtime(row);
+      this.logger.log({ sessionId: id, event: 'manual_restart_requested' });
       await this.repository.updateCurrent(id, {
         isEnabled: true,
         retryCount: 0,
@@ -519,10 +602,11 @@ export class SessionManagerService
       );
       try {
         await this.lifecycle.teardown(runtime);
-      } catch {
+      } catch (error) {
         await this.failLocked(
           runtime,
           'Pending authentication writes failed during restart',
+          error,
         );
         throw new ServiceUnavailableException(
           'Authentication cleanup failed; restart aborted',
@@ -540,6 +624,7 @@ export class SessionManagerService
       const runtime = this.runtime(row);
       const status =
         row.status === 'LOGGED_OUT' ? 'LOGGED_OUT' : 'DISCONNECTED';
+      this.logger.log({ sessionId: id, event: 'session_stop_requested' });
       await this.repository.transition(
         id,
         {
@@ -559,10 +644,11 @@ export class SessionManagerService
       );
       try {
         await this.lifecycle.teardown(runtime);
-      } catch {
+      } catch (error) {
         await this.failLocked(
           runtime,
           'Pending authentication writes failed during disconnect',
+          error,
         );
         throw new ServiceUnavailableException(
           'Authentication cleanup failed; session stopped',
@@ -586,14 +672,16 @@ export class SessionManagerService
         );
       }
       await this.repository.updateCurrent(id, { isEnabled: false });
+      this.logger.log({ sessionId: id, event: 'session_logout_requested' });
       runtime.intentionalStop = true;
       this.lifecycle.cancelRetry(runtime);
       try {
         await runtime.socket.logout();
-      } catch {
+      } catch (error) {
         await this.failLocked(
           runtime,
           'Remote logout was not confirmed; authentication retained',
+          error,
         );
         throw new ServiceUnavailableException(
           'Logout was not confirmed; authentication retained',
@@ -679,7 +767,14 @@ export class SessionManagerService
 
   async requestPairingCode(id: string, phone: string): Promise<PairingCode> {
     const runtime = this.runtimes.get(id);
-    if (!runtime) throw new ConflictException('Start pairing first');
+    if (!runtime) {
+      const error = new ConflictException('Start pairing first');
+      this.logger.exception(
+        { sessionId: id, event: 'pairing_code_request_failed' },
+        error,
+      );
+      throw error;
+    }
     const generation = runtime.generation;
     const deadline = Date.now() + 60000;
     // Do not hold the session queue while awaiting events that need that queue.
@@ -687,10 +782,16 @@ export class SessionManagerService
       this.current(runtime, generation) &&
       !(runtime.pairingReady && runtime.socket?.ws.isOpen)
     ) {
-      if (Date.now() >= deadline)
-        throw new ServiceUnavailableException(
+      if (Date.now() >= deadline) {
+        const error = new ServiceUnavailableException(
           'Pairing connection is not ready',
         );
+        this.logger.exception(
+          { sessionId: id, event: 'pairing_readiness_timeout' },
+          error,
+        );
+        throw error;
+      }
       await delay(50);
     }
     return this.command(id, async () => {
@@ -710,7 +811,7 @@ export class SessionManagerService
         };
       if (
         now - runtime.lastCodeRequestAt <
-         this.configService.getOrThrow('WA_PAIRING_RATE_LIMIT_MS')
+        this.configService.getOrThrow('WA_PAIRING_RATE_LIMIT_MS')
       )
         throw new HttpException(
           'Pairing requests are rate limited',
@@ -720,7 +821,11 @@ export class SessionManagerService
       let code: string;
       try {
         code = await runtime.socket.requestPairingCode(phone);
-      } catch {
+      } catch (error) {
+        this.logger.exception(
+          { sessionId: id, event: 'pairing_code_request_failed' },
+          error,
+        );
         throw new ServiceUnavailableException('Unable to request pairing code');
       }
       await runtime.auth!.saveCreds();
@@ -731,8 +836,10 @@ export class SessionManagerService
       );
       runtime.code = {
         value: code,
-        expiresAt: Date.now() + this.configService.getOrThrow('WA_PAIRING_CODE_TTL_MS'),
+        expiresAt:
+          Date.now() + this.configService.getOrThrow('WA_PAIRING_CODE_TTL_MS'),
       };
+      this.logger.log({ sessionId: id, event: 'pairing_code_issued' });
       this.runtimeState.state(runtime, 'AWAITING_PAIRING');
       return {
         code,
@@ -752,6 +859,7 @@ export class SessionManagerService
   async inspectConnections(): Promise<void> {
     for (const runtime of this.runtimes.values()) {
       await this.command(runtime.sessionId, async () => {
+        this.runtimeState.observePairingExpiry(runtime);
         if (this.stopping || runtime.intentionalStop || runtime.reconnectTimer)
           return;
         const now = Date.now();
@@ -797,18 +905,25 @@ export class SessionManagerService
   async onApplicationBootstrap(): Promise<void> {
     if (this.restored || this.stopping) return;
     this.restored = true;
-    const sessions = await this.repository.recoverable(
-      Number(this.configService.getOrThrow('WA_MAX_SESSIONS')),
-    );
+    const sessions = await this.repository
+      .recoverable(Number(this.configService.getOrThrow('WA_MAX_SESSIONS')))
+      .catch((error: unknown) => {
+        this.logger.exception({ event: 'startup_sessions_load_failed' }, error);
+        throw error;
+      });
     let index = 0;
     const worker = async () => {
       while (!this.stopping && index < sessions.length) {
         const session = sessions[index++]!;
         if (index > 1) {
           try {
-            await delay( this.configService.getOrThrow('WA_STARTUP_STAGGER_MS'), undefined, {
-              signal: this.startupAbort.signal,
-            });
+            await delay(
+              this.configService.getOrThrow('WA_STARTUP_STAGGER_MS'),
+              undefined,
+              {
+                signal: this.startupAbort.signal,
+              },
+            );
           } catch {
             return;
           }
@@ -816,7 +931,9 @@ export class SessionManagerService
         if (this.stopping) return;
         try {
           await this.start(session.id);
-          const deadline = Date.now() + this.configService.getOrThrow('WA_CONNECTION_STUCK_MS');
+          const deadline =
+            Date.now() +
+            this.configService.getOrThrow('WA_CONNECTION_STUCK_MS');
           // Keep the startup slot until the initial attempt reaches a result.
           while (
             !this.stopping &&
@@ -833,20 +950,28 @@ export class SessionManagerService
           }
           if (!this.stopping && Date.now() >= deadline)
             await this.inspectConnections();
-        } catch {
-          this.logger.error({
-            sessionId: session.id,
-            event: 'startup_restore_failed',
-          });
+        } catch (error) {
+          this.logger.exception(
+            {
+              sessionId: session.id,
+              event: 'startup_restore_failed',
+            },
+            error,
+          );
         }
       }
     };
     // Recovery continues in the background so administration/health remain usable.
     this.recovery = Promise.all(
-      Array.from({ length: this.configService.getOrThrow('WA_STARTUP_CONCURRENCY') }, worker),
+      Array.from(
+        { length: this.configService.getOrThrow('WA_STARTUP_CONCURRENCY') },
+        worker,
+      ),
     )
       .then(() => undefined)
-      .catch(() => this.logger.error({ event: 'startup_recovery_failed' }));
+      .catch((error: unknown) =>
+        this.logger.exception({ event: 'startup_recovery_failed' }, error),
+      );
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -858,7 +983,22 @@ export class SessionManagerService
     }
     await Promise.allSettled(
       [...this.runtimes.values()].map(async (runtime) => {
-        await runtime.socket?.end(undefined);
+        this.logger.log({
+          sessionId: runtime.sessionId,
+          event: 'session_shutdown',
+        });
+        try {
+          await runtime.socket?.end(undefined);
+        } catch (error) {
+          this.logger.exception(
+            {
+              sessionId: runtime.sessionId,
+              event: 'shutdown_socket_close_failed',
+            },
+            error,
+          );
+          throw error;
+        }
       }),
     );
     await this.recovery;
@@ -868,14 +1008,18 @@ export class SessionManagerService
       [...this.runtimes.values()].map(async (runtime) => {
         try {
           await this.lifecycle.teardown(runtime);
-        } catch {
-          this.logger.error({
-            sessionId: runtime.sessionId,
-            event: 'shutdown_auth_flush_failed',
-          });
+        } catch (error) {
+          this.logger.exception(
+            {
+              sessionId: runtime.sessionId,
+              event: 'shutdown_auth_flush_failed',
+            },
+            error,
+          );
         }
       }),
     );
+    await this.logs.flush();
     this.runtimes.clear();
     this.sessionPhones.clear();
   }

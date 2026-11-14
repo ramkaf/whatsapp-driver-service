@@ -5,6 +5,7 @@ import pino from 'pino';
 
 import { RetryCache } from './retry-cache.ts';
 import { SocketEventRegistrarService } from './socket-event-registrar.service.ts';
+import type { SessionRuntime } from '../../interfaces/session-runtime.ts';
 
 // Builds configured Baileys sockets with isolated retry caches.
 @Injectable()
@@ -19,6 +20,7 @@ export class SocketFactoryService {
     auth: AuthenticationState,
     qrTimeout: number,
     isCurrent = () => true,
+    runtimeSnapshot?: () => Partial<SessionRuntime>,
   ): WASocket {
     const socket = makeWASocket({
       auth,
@@ -37,7 +39,7 @@ export class SocketFactoryService {
     });
     this.disposers.set(
       socket,
-      this.events.register(sessionId, socket, isCurrent),
+      this.events.register(sessionId, socket, isCurrent, runtimeSnapshot),
     );
     return socket;
   }

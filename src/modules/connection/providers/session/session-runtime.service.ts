@@ -7,10 +7,18 @@ import type {
 } from '../../interfaces/session-results.ts';
 import { CONNECTION_REASONS } from '../../interfaces/connection-status.ts';
 import { PairingMethodEnum } from '../../../sessions/interfaces/session.interface.ts';
+import { ConnectionSessionLogService } from '../logging/connection-session-log.service.ts';
 
 // Creates runtime state and projects public session and pairing information.
 @Injectable()
 export class SessionRuntimeService {
+  private readonly loggedExpirations = new WeakMap<
+    SessionRuntime,
+    Partial<Record<PairingMethodEnum, number>>
+  >();
+
+  constructor(private readonly logs: ConnectionSessionLogService) {}
+
   create(row: WaSession): SessionRuntime {
     return {
       sessionId: row.id,
@@ -39,11 +47,25 @@ export class SessionRuntimeService {
   }
 
   state(runtime: SessionRuntime, status: SessionRuntime['status']): void {
+    const previousStatus = runtime.status;
     if (runtime.status !== status) runtime.stateSince = Date.now();
     runtime.status = status;
     if (['CONNECTED', 'AWAITING_PAIRING', 'AUTHENTICATING'].includes(status))
       runtime.reason = null;
     runtime.lastActivityAt = Date.now();
+    if (previousStatus !== status) {
+      void this.logs.write(
+        SessionRuntimeService.name,
+        'INFO',
+        {
+          sessionId: runtime.sessionId,
+          event: 'runtime_state_changed',
+          message: `Session state changed from ${previousStatus} to ${status}`,
+          previousStatus,
+        },
+        runtime,
+      );
+    }
   }
 
   recordDisconnect(
@@ -54,11 +76,66 @@ export class SessionRuntimeService {
     runtime.reason = reason;
     runtime.lastDisconnectCode = code;
     runtime.lastDisconnectedAt = Date.now();
+    void this.logs.write(
+      SessionRuntimeService.name,
+      'WARN',
+      {
+        sessionId: runtime.sessionId,
+        event: 'disconnect_recorded',
+        message: 'Session disconnect observed',
+        reason,
+        code,
+      },
+      runtime,
+    );
   }
+
+  observePairingExpiry(runtime: SessionRuntime): void {
+    const method = runtime.pairingMethod;
+    if (
+      method === PairingMethodEnum.CODE &&
+      (runtime.status !== 'AWAITING_PAIRING' ||
+        runtime.auth?.state.creds.me?.id)
+    )
+      return;
+    const secret = method === PairingMethodEnum.QR ? runtime.qr : runtime.code;
+    if (!secret) return;
+    const expiresAt = Number(secret.expiresAt);
+    if (
+      !Number.isFinite(expiresAt) ||
+      expiresAt > Date.now() ||
+      !Number.isFinite(new Date(expiresAt).getTime())
+    )
+      return;
+    const logged = this.loggedExpirations.get(runtime) ?? {};
+    if (logged[method] === expiresAt) return;
+    logged[method] = expiresAt;
+    this.loggedExpirations.set(runtime, logged);
+    void this.logs.write(
+      SessionRuntimeService.name,
+      'WARN',
+      {
+        sessionId: runtime.sessionId,
+        event:
+          method === PairingMethodEnum.QR
+            ? 'pairing_qr_expired'
+            : 'pairing_code_expired',
+        message:
+          method === PairingMethodEnum.QR
+            ? 'Pairing QR expired'
+            : 'Pairing code expired',
+        expiresAt: new Date(expiresAt).toISOString(),
+      },
+      runtime,
+    );
+  }
+
   pairing(runtime?: SessionRuntime): PairingQr {
     if (!runtime) {
       return { qr: null, expiresAt: null };
     }
+
+    this.observePairingExpiry(runtime);
 
     const qr = runtime.qr;
 
@@ -95,6 +172,7 @@ export class SessionRuntimeService {
         connectedAt: null,
         uptimeMs: 0,
       };
+    this.observePairingExpiry(runtime);
     const connected =
       runtime.status === 'CONNECTED' && !!runtime.socket?.ws.isOpen;
     // A missing live socket must not be reported as CONNECTED while its close

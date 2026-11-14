@@ -106,6 +106,45 @@ model WaSessionEvent {
   @@map("wa_session_events")
 }
 
+enum WaSessionLogLevel {
+  INFO
+  WARN
+  ERROR
+  EXCEPTION
+  RETRY
+}
+
+model WaSessionLog {
+  id                 String             @id @default(cuid()) @db.VarChar(30)
+  sessionId          String?            @map("session_id") @db.VarChar(191)
+  level              WaSessionLogLevel
+  event              String             @db.VarChar(100)
+  context            String             @db.VarChar(100)
+  message            String             @db.Text
+  metadata           Json?
+  errorName          String?            @map("error_name") @db.VarChar(191)
+  errorMessage       String?            @map("error_message") @db.Text
+  errorStack         String?            @map("error_stack") @db.Text
+  status             WaSessionStatus?
+  socketConnected    Boolean?           @map("socket_connected")
+  generation         Int?
+  retryCount         Int?               @map("retry_count")
+  nextRetryAt        DateTime?          @map("next_retry_at") @db.DateTime(3)
+  connectedAt        DateTime?          @map("connected_at") @db.DateTime(3)
+  lastDisconnectedAt DateTime?          @map("last_disconnected_at") @db.DateTime(3)
+  expiresAt          DateTime?          @map("expires_at") @db.DateTime(3)
+  qrExpiresAt        DateTime?          @map("qr_expires_at") @db.DateTime(3)
+  codeExpiresAt      DateTime?          @map("code_expires_at") @db.DateTime(3)
+  stateSince         DateTime?          @map("state_since") @db.DateTime(3)
+  disconnectCode     Int?               @map("disconnect_code")
+  reason             String?            @db.VarChar(100)
+  createdAt          DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([sessionId, createdAt])
+  @@index([level, createdAt])
+  @@map("wasessionlogs")
+}
+
 enum WhatsappMessageInboxStatus {
   RECEIVED
   READY

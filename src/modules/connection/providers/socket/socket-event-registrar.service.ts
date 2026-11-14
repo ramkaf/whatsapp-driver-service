@@ -1,7 +1,6 @@
 import {
   Inject,
   Injectable,
-  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type {
@@ -10,6 +9,8 @@ import type {
   ConnectionState,
 } from '@whiskeysockets/baileys';
 import { RealtimeService } from '../realtime/realtime.service.ts';
+import { ConnectionSessionLogService } from '../logging/connection-session-log.service.ts';
+import type { SessionRuntime } from '../../interfaces/session-runtime.ts';
 import {
   ConnectionMessageSource,
   MESSAGE_EVENTS,
@@ -24,7 +25,6 @@ import type {
 /** Bridges each current socket to server-side consumers and the existing browser stream. */
 @Injectable()
 export class SocketEventRegistrarService extends ConnectionMessageSource {
-  private readonly logger = new Logger(SocketEventRegistrarService.name);
   private readonly listeners = new Set<MessageEventListener>();
   private readonly mediaContexts = new Map<
     string,
@@ -33,6 +33,8 @@ export class SocketEventRegistrarService extends ConnectionMessageSource {
 
   constructor(
     @Inject(RealtimeService) private readonly realtime: RealtimeService,
+    @Inject(ConnectionSessionLogService)
+    private readonly logs: ConnectionSessionLogService,
   ) {
     super();
   }
@@ -51,7 +53,15 @@ export class SocketEventRegistrarService extends ConnectionMessageSource {
     sessionId: string,
     socket: WASocket,
     isCurrent = () => true,
+    runtimeSnapshot?: () => Partial<SessionRuntime>,
   ): () => void {
+    const logger = this.logs.createLogger(
+      SocketEventRegistrarService.name,
+      (id) =>
+        id === sessionId
+          ? { ...runtimeSnapshot?.(), sessionId, socket }
+          : undefined,
+    );
     let disposed = false;
     let closed = false;
     const usable = () =>
@@ -82,12 +92,16 @@ export class SocketEventRegistrarService extends ConnectionMessageSource {
         for (const consumer of this.listeners) {
           try {
             consumer(frame);
-          } catch {
-            this.logger.error({
-              sessionId,
-              event,
-              reason: 'message_consumer_failed',
-            });
+          } catch (error) {
+            logger.exception(
+              {
+                sessionId,
+                event,
+                reason: 'message_consumer_failed',
+                message: 'Message event consumer failed',
+              },
+              error,
+            );
           }
         }
         this.realtime.publish(sessionId, event, data);

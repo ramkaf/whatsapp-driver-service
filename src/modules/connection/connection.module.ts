@@ -9,11 +9,13 @@ import { SessionDataModule } from '../sessions/session-data.module.ts';
 import { SessionManagerService } from './providers/session/session-manager.service.ts';
 import { SocketFactoryService } from './providers/socket/socket-factory.service.ts';
 import { ConnectionSupervisorService } from './providers/recovery/connection-supervisor.service.ts';
+import { ConnectionSessionLogService } from './providers/logging/connection-session-log.service.ts';
 
 // Wires session orchestration, socket infrastructure, recovery, and realtime providers.
 @Module({
   imports: [AuthStateModule, SessionDataModule],
   providers: [
+    ConnectionSessionLogService,
     SessionRuntimeService,
     SocketLifecycleService,
     SocketEventRegistrarService,
