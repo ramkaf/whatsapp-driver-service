@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@afra/exchange-logger':
-        specifier: ^3.0.5
-        version: 3.0.5(amqplib@2.3.1)(supports-color@8.1.1)
       '@nestjs/common':
         specifier: ^12.0.1
         version: 12.4.2(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
@@ -158,15 +155,6 @@ importers:
         version: 3.0.0
 
 packages:
-
-  '@afra/exchange-logger@3.0.5':
-    resolution: {integrity: sha512-lUFcuV5BDMSrFIwUDWNjchWsCDT0MzfsAnqiYQgOc0HurQJrz3XXCvzoRT1rQrntkE8ZHyuuD6A9w9eXXgyw7w==}
-    engines: {node: '>=16.4.0'}
-    peerDependencies:
-      amqplib: '>=0.8.0'
-    peerDependenciesMeta:
-      amqplib:
-        optional: true
 
   '@angular-devkit/core@22.2.6':
     resolution: {integrity: sha512-OtFUe9fLXpHsqO6gCSbTWIaTO64MCrESRVigs9SAW4EzIagCAhgB0Y8GflTjmKGLvJjilBFJFd0JSIzNxLyifA==}
@@ -3322,10 +3310,6 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
-  rotating-file-stream@3.2.10:
-    resolution: {integrity: sha512-9kviflu1v0iTD3MNoRLjPuuqLTsTOrovKdadoSYcUsgY5mKFNuhcM7WifJcwvxfIP6YJdVVxgWQr9YS3lJS+bg==}
-    engines: {node: '>=14.0'}
-
   router@2.2.0:
     resolution: {integrity: sha512-nLTrUKm2UyiL7rlhapu/Zl45FwNgkZGaCpZbIHajDYgwlJCOzLSk+cIPAnsEqV955GjILJnKbdQC1nVPz+gAYQ==}
     engines: {node: '>= 18'}
@@ -3896,17 +3880,6 @@ packages:
     resolution: {integrity: sha512-KiGErG2J0G82LSpniV0CtIzjlJ10E04j02VOudJsPyPwNZgGnRKQy7I1R7GMyg/QswnE4l7ohSGrQbQbjXPPDA==}
 
 snapshots:
-
-  '@afra/exchange-logger@3.0.5(amqplib@2.3.1)(supports-color@8.1.1)':
-    dependencies:
-      '@elastic/ecs-pino-format': 1.5.0
-      elastic-apm-node: 4.18.0(supports-color@8.1.1)
-      pino: 10.4.0
-      rotating-file-stream: 3.2.10
-    optionalDependencies:
-      amqplib: 2.3.1
-    transitivePeerDependencies:
-      - supports-color
 
   '@angular-devkit/core@22.2.6(chokidar@5.0.0)':
     dependencies:
@@ -6951,8 +6924,6 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.18
       '@rolldown/binding-win32-arm64-msvc': 1.2.18
       '@rolldown/binding-win32-x64-msvc': 1.2.18
-
-  rotating-file-stream@3.2.10: {}
 
   router@2.2.0(supports-color@8.1.1):
     dependencies:
