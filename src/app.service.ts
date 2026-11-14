@@ -1,3 +1,4 @@
+import { IRedis } from '@libs/common';
 import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()

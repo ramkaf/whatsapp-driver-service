@@ -3,6 +3,8 @@ import {
   AppConfigModule,
   RabbitMQModule,
   RedisModule,
+  MinioModule,
+  type MinioConfig,
   type RedisConfig,
 } from '@libs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -32,6 +34,12 @@ import { PrismaModule } from '@libs/prisma';
       useFactory: (config: ConfigService) => ({
         redis: config.getOrThrow<RedisConfig>('redis'),
       }),
+    }),
+    MinioModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        config.getOrThrow<MinioConfig>('minio'),
     }),
     PrismaModule,
   ],
