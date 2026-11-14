@@ -1,4 +1,4 @@
-import { configure, AfraLogger, InitAfraLogger } from '@libs/common';
+import { configure, InitAfraLogger } from '@libs/common';
 InitAfraLogger();
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
