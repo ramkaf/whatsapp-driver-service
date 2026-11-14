@@ -11,7 +11,7 @@ services:
       - ./mkdocs.yml:/app/mkdocs.yml
     restart: unless-stopped
   mysql:
-    image: docker.afralab.ir/library/mysql:8.4
+    image: public.ecr.aws/docker/library/mysql:8.4
     container_name: whatsapp-mysql
     restart: unless-stopped
 
@@ -30,7 +30,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
   redis:
-    image: docker.afralab.ir/library/redis:7
+    image: public.ecr.aws/docker/library/redis:7
     container_name: whatsapp-redis
     restart: unless-stopped
     ports:
@@ -54,7 +54,7 @@ services:
       retries: 5
       start_period: 5s
   minio:
-      image: docker.afralab.ir/library/minio:RELEASE.2025-09-07T16-13-09Z
+      image: public.ecr.aws/y9w4h2u9/minio:RELEASE.2025-09-07T16-13-09Z 
       container_name: minio
       restart: unless-stopped
 
