@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 import { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
+import { ConfigService } from '@nestjs/config';
 
 // به‌صورت دوره‌ای اتصال‌های بسته یا معطل را بررسی و بازیابی آن‌ها را به مدیر سشن واگذار می‌کند.
 @Injectable()
@@ -14,7 +14,7 @@ export class ConnectionWatchdogService
   private checking: Promise<void> | null = null;
   constructor(
     private readonly manager: SessionManagerService,
-    @Inject(configuer.KEY) private readonly config: IAppConfig,
+    private readonly configService:ConfigService
   ) {}
 
   onApplicationBootstrap() {
@@ -28,7 +28,7 @@ export class ConnectionWatchdogService
         .finally(() => {
           this.checking = null;
         });
-    }, this.config.whatsapp.watchdogIntervalMs);
+    }, this.configService.getOrThrow('WA_WATCHDOG_INTERVAL_MS'));
     this.timer.unref();
   }
 

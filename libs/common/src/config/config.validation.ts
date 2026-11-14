@@ -7,6 +7,9 @@ export function validateEnvironment(
   const variables = Object.assign(new EnvironmentVariablesValidator(), env);
 
   for (const key of [
+    'APP_PORT',
+    'PORT',
+    'MYSQL_PORT',
     'WA_MAX_SESSIONS',
     'WA_STARTUP_CONCURRENCY',
     'WA_STARTUP_STAGGER_MS',
@@ -16,9 +19,6 @@ export function validateEnvironment(
     'WA_PAIRING_TTL_MS',
     'WA_PAIRING_CODE_TTL_MS',
     'WA_PAIRING_RATE_LIMIT_MS',
-    'APP_PORT',
-    'PORT',
-    'MYSQL_PORT',
     'REDIS_PORT',
     'REDIS_DB',
     'REDIS_CONNECT_TIMEOUT_MS',
@@ -38,8 +38,12 @@ export function validateEnvironment(
     }
   }
 
-  if (env.MINIO_USE_SSL === 'true') variables.MINIO_USE_SSL = true;
-  if (env.MINIO_USE_SSL === 'false') variables.MINIO_USE_SSL = false;
+  if (typeof env.MINIO_USE_SSL === 'string') {
+    const value = env.MINIO_USE_SSL.trim().toLowerCase();
+    if (value === 'true' || value === 'false') {
+      variables.MINIO_USE_SSL = value === 'true';
+    }
+  }
 
   const errors = validateSync(variables);
   if (errors.length > 0) {

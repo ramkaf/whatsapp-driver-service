@@ -112,6 +112,8 @@ nav:
       - Boilerplate: backend/boilerplate.md
       - Libs: backend/libs.md
       - RabbitMQ: backend/rabbitmq.md
+      - MinIO: backend/minio.md
+      - Version: backend/version.md
       - WhatsApp sessions: backend/whatsapp-sessions.md
 
   - Management:

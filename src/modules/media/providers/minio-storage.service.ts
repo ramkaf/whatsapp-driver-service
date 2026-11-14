@@ -1,7 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { OnModuleInit } from '@nestjs/common';
-import { configuer } from '@libs/common';
-import type { IAppConfig } from '@libs/common';
 import * as Minio from 'minio';
 import type { Readable } from 'node:stream';
 import * as http from 'node:http';
@@ -12,6 +10,7 @@ import type {
   StoredMinioObject,
 } from '../interfaces/media.interface.ts';
 import { createTimeoutTransport } from '../utils/media-network-timeout.util.ts';
+import { ConfigService } from '@nestjs/config';
 
 const DOWNLOAD_URL_TTL_SECONDS = 7 * 24 * 60 * 60;
 
@@ -24,11 +23,14 @@ export class MinioStorageService implements OnModuleInit {
   readonly bucket: string;
 
   constructor(
-    @Inject(configuer.KEY)
-    config: IAppConfig,
+    private readonly configService:ConfigService
   ) {
-    const { endpoint, port, useSsl, accessKey, secretKey, bucket } =
-      config.minio;
+    const endpoint = this.configService.getOrThrow<string>('MINIO_ENDPOINT');
+    const port = Number(this.configService.getOrThrow<string>('MINIO_PORT'));
+    const useSsl = this.configService.getOrThrow<string>('MINIO_USE_SSL') === 'true';
+    const accessKey = this.configService.getOrThrow<string>('MINIO_ACCESS_KEY');
+    const secretKey = this.configService.getOrThrow<string>('MINIO_SECRET_KEY');
+    const bucket = this.configService.getOrThrow<string>('MINIO_BUCKET');
 
     this.bucket = bucket;
 

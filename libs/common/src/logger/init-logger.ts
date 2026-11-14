@@ -1,11 +1,10 @@
 import afraLogger from '@afra/exchange-logger';
-import { afraLoggerConfiguer } from '../config/afra-logger-configuer.ts';
+import { afraLoggerConfigure } from '../config/afra-logger-configure.ts';
 
 export const InitAfraLogger = () =>
   afraLogger.start({
     apm: {
-      ...afraLoggerConfiguer(),
-      active: true,
+      ...afraLoggerConfigure(),
       captureBody: 'off',
     },
     logger: {

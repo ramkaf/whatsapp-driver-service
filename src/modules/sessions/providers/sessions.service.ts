@@ -1,11 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { configuer } from '@libs/common';
-import type { IAppConfig } from '@libs/common';
 import { WA_SESSION_REPOSITORY, type IWaSessionRepository } from '@libs/prisma';
 import { SessionManagerService } from '../../connection/providers/session/session-manager.service.ts';
 import { SessionQueue } from '../../connection/session-queue.ts';
 import type { CreateSessionDto } from '../dto/sessions.dto.ts';
 import { normalizePhone } from '../phone.ts';
+import { ConfigService } from '@nestjs/config';
 
 // ساخت، مشاهده و عملیات مدیریتی سشن‌ها را بین مخزن داده و مدیر اتصال هماهنگ می‌کند.
 @Injectable()
@@ -13,10 +12,10 @@ export class SessionsService {
   private readonly creation = new SessionQueue();
 
   constructor(
+    private readonly configService:ConfigService,
     @Inject(WA_SESSION_REPOSITORY)
     private readonly sessionRepository: IWaSessionRepository,
     private readonly sessionManagerService: SessionManagerService,
-    @Inject(configuer.KEY) private readonly config: IAppConfig,
   ) {}
 
   async create(dto: CreateSessionDto) {
@@ -27,7 +26,8 @@ export class SessionsService {
           pairingMethod: dto.pairingMethod,
           phone: normalizePhone(dto.phone),
         },
-        this.config.whatsapp.maxSessions,
+        // this.config.whatsapp.maxSessions,
+        this.configService.getOrThrow('WA_MAX_SESSIONS')
       );
       return this.details(row.id);
     });

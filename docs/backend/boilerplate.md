@@ -67,6 +67,22 @@ pnpm install --frozen-lockfile
 pnpm run build
 pnpm test
 ```
+## خطا `fatal: a branch named 'chore/update-boilerplate' already exists`
+```bash 
+git switch main
+git branch -D chore/update-boilerplate
+git switch -c chore/update-boilerplate
+```
+## mearge in main
+```bash
+git switch main
+git merge chore/update-boilerplate
+```
+## mearge in dev
+```bash
+git switch dev
+git merge chore/update-boilerplate
+```
 
 اگر merge conflict ایجاد شد، فایل‌های علامت‌گذاری‌شده را بررسی و اصلاح کنید، سپس ادامه دهید:
 

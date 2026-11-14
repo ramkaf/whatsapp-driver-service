@@ -55,19 +55,29 @@ export class SessionRuntimeService {
     runtime.lastDisconnectCode = code;
     runtime.lastDisconnectedAt = Date.now();
   }
-
   pairing(runtime?: SessionRuntime): PairingQr {
-    if (!runtime) return { qr: null, expiresAt: null };
-    if (runtime.qr && runtime.qr.expiresAt <= Date.now()) runtime.qr = null;
+    if (!runtime) {
+      return { qr: null, expiresAt: null };
+    }
+
+    const qr = runtime.qr;
+
+    if (!qr || runtime.pairingMethod !== 'QR') {
+      return { qr: null, expiresAt: null };
+    }
+
+    const expiresAt = Number(qr.expiresAt);
+
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      runtime.qr = null;
+      return { qr: null, expiresAt: null };
+    }
+
     return {
-      qr: runtime.pairingMethod === 'QR' ? (runtime.qr?.value ?? null) : null,
-      expiresAt:
-        runtime.pairingMethod === 'QR' && runtime.qr
-          ? new Date(runtime.qr.expiresAt).toISOString()
-          : null,
+      qr: qr.value ?? null,
+      expiresAt: new Date(expiresAt).toISOString(),
     };
   }
-
   snapshot(runtime?: SessionRuntime): SessionSnapshot {
     if (!runtime)
       return {

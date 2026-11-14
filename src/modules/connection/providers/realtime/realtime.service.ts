@@ -1,11 +1,9 @@
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { configuer } from '@libs/common';
-import type { IAppConfig } from '@libs/common';
-
 import type { ConnectionStatusSource } from '../../interfaces/session-results.ts';
+import { ConfigService } from '@nestjs/config';
 export type { ConnectionStatusSource } from '../../interfaces/session-results.ts';
 
 /** Handles realtime authentication, session status polling, and event delivery in one service. */
@@ -17,11 +15,25 @@ export class RealtimeService implements OnModuleDestroy {
   private readonly alive = new Set<WebSocket>();
   private monitor?: ReturnType<typeof setInterval>;
   private heartbeat?: ReturnType<typeof setInterval>;
-  constructor(@Inject(configuer.KEY) private readonly config: IAppConfig) {}
+  private readonly corsOrigins: string[];
+  constructor(private readonly configService:ConfigService) {
+     this.corsOrigins = (
+    this.configService.getOrThrow<string>(
+      'APP_CORS_ORIGINS',
+    ) ||
+    this.configService.getOrThrow<string>(
+      'FRONTEND_DOMAIN',
+    ) ||
+    '*'
+  )
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  }
 
   /** Attaches WebSocket to HTTP, polls session status every second, and checks liveness every 15 seconds. */
   attach(http: Server, source: ConnectionStatusSource): void {
-    const path = `/${this.config.apiPrefix}/connections/events`.replace(
+    const path = `/${this.configService.getOrThrow('API_PREFIX')}/connections/events`.replace(
       /\/+/g,
       '/',
     );
@@ -64,7 +76,7 @@ export class RealtimeService implements OnModuleDestroy {
           const origin = request.headers.origin;
           if (
             new URL(origin).host !== request.headers.host &&
-            !this.config.corsOrigins?.includes(origin)
+            !this.corsOrigins?.includes(origin)
           ) {
             socket.destroy();
             return;
@@ -107,7 +119,7 @@ export class RealtimeService implements OnModuleDestroy {
               !input.sessionId ||
               !timingSafeEqual(
                 digest(input.token),
-                digest(this.config.whatsapp.adminApiKey),
+                digest(this.configService.getOrThrow('WA_ADMIN_API_KEY')),
               )
             ) {
               client.close(1008, 'Invalid credentials');

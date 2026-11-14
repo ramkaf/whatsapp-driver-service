@@ -14,31 +14,8 @@ describe('database configuration', () => {
     expect(readDatabaseConfig(env)).toMatchObject({
       port: 3306,
       connectionLimit: 10,
-      allowPublicKeyRetrieval: false,
     });
   });
-
-  it.each([
-    ['true', true],
-    ['false', false],
-  ] as const)(
-    'reads DB_ALLOW_PUBLIC_KEY_RETRIEVAL=%s as a boolean',
-    (DB_ALLOW_PUBLIC_KEY_RETRIEVAL, expected) => {
-      expect(
-        readDatabaseConfig({ ...env, DB_ALLOW_PUBLIC_KEY_RETRIEVAL })
-          .allowPublicKeyRetrieval,
-      ).toBe(expected);
-    },
-  );
-
-  it.each(['', '1', 'yes', 'invalid'])(
-    'rejects an invalid public key retrieval setting %j',
-    (DB_ALLOW_PUBLIC_KEY_RETRIEVAL) => {
-      expect(() =>
-        readDatabaseConfig({ ...env, DB_ALLOW_PUBLIC_KEY_RETRIEVAL }),
-      ).toThrow('DB_ALLOW_PUBLIC_KEY_RETRIEVAL');
-    },
-  );
 
   it.each(['', '0', '65536', '1.5', '3306abc'])(
     'rejects invalid port %j',

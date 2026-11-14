@@ -15,18 +15,20 @@ services:
     container_name: whatsapp-mysql
     restart: unless-stopped
 
+    command:
+      - --mysql-native-password=ON
+
     ports:
-      - '${MYSQL_HOST}:${MYSQL_PORT}:3306'
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_PORT:-3307}:3306"
 
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
 
     volumes:
       - mysql_data:/var/lib/mysql
-
   redis:
     image: docker.afralab.ir/library/redis:7
     container_name: whatsapp-redis
@@ -52,25 +54,28 @@ services:
       retries: 5
       start_period: 5s
   minio:
-    image: docker.afralab.ir/library/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: minio
-    restart: unless-stopped
+      image: docker.afralab.ir/library/minio:RELEASE.2025-09-07T16-13-09Z
+      container_name: minio
+      restart: unless-stopped
 
-    command: server /data --address ":9000" --console-address ":9002"
+      command:
+        - server
+        - /data
+        - --address
+        - ":9000"
+        - --console-address
+        - ":9001"
 
-    env_file:
-      - .env
+      environment:
+        MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+        MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
 
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      ports:
+        - "${MINIO_BIND_ADDRESS:-127.0.0.1}:${MINIO_API_HOST_PORT:-9003}:9000"
+        - "${MINIO_BIND_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9005}:9001"
 
-    ports:
-      - "127.0.0.1:9002:9002"
-      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
-
-    volumes:
-      - minio_data:/data
+      volumes:
+        - minio_data:/data
 
 volumes:
   mysql_data:

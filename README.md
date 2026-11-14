@@ -9,6 +9,93 @@ pnpm install --frozen-lockfile
 pnpm run prepare
 ```
 
+## Local infrastructure
+
+`docker-compose.local.yml` starts MySQL, Redis and MinIO for an application
+running on the host. It uses the `whatsapp-driver-local` project and separate
+volumes from `docker-compose.yml`.
+
+Copy the template once if `.env.local` does not already exist, then start the
+services and initialize the empty local database:
+
+```bash
+cp .env.local.example .env.local
+pnpm up:local
+pnpm db:local db push
+pnpm db:local generate
+pnpm start:local
+```
+
+`pnpm up:local` runs
+`docker compose --env-file .env.local -f docker-compose.local.yml up -d --wait`.
+The services bind to `127.0.0.1` on these host ports:
+
+| Service | Host port |
+| --- | --- |
+| MySQL | `13306` |
+| Redis | `16379` |
+| MinIO S3 API | `19000` |
+| MinIO console | `19001` |
+
+`pnpm start:local` and `pnpm db:local <command>` select `.env.local` through
+`DOTENV_CONFIG_PATH` for the app, logger and Prisma CLI. Exported environment
+variables take precedence. Without an explicit path, `NODE_ENV=production`
+selects `.env.prod` and other values select `.env.local`.
+Keep local credentials in the ignored `.env.local` file.
+
+For migration-based development, use `pnpm db:local migrate dev` with the
+dedicated shadow database configured by `DB_SHADOW_NAME`; choose this workflow
+instead of `db push` when maintaining migration history. Stop local services
+with `pnpm down:local`; their volumes remain available for the next start.
+MySQL creates the databases and user only when its volume is empty. Later
+credential changes in `.env.local` require matching SQL updates in MySQL.
+
+## Production with Docker Compose
+
+Production runs the application, MySQL, Redis and MinIO in the separate
+`whatsapp-driver-prod` project. On a new checkout, create `.env.prod` from
+`.env.prod.example` and set its credentials and public domains. The real
+`.env.prod` is ignored by Git and is injected into containers at runtime.
+Inside Compose, connection addresses are `mysql:3306`, `redis:6379` and
+`minio:9000`; infrastructure volumes are separate from local development.
+
+Build images and apply the project's migrations before starting the app:
+
+```bash
+pnpm docker:prod build
+pnpm db:prod migrate deploy
+pnpm up:prod
+```
+
+If starting with a new empty database and no migration files, initialize its
+tables with `pnpm db:prod db push` instead of `migrate deploy`. Schema changes
+are explicit; container startup does not apply them automatically.
+
+The default application URL is `http://127.0.0.1:3001`. `APP_HOST_PORT` and
+`APP_BIND_ADDRESS` control its published address. Database and Redis ports stay
+inside the Docker network. `pnpm db:prod <command>` runs Prisma in a tooling
+container using `.env.prod`; it does not require a host database port.
+The image build uses the project's `.npmrc` as a BuildKit secret.
+The current MinIO signing client uses the internal `minio:9000` endpoint for
+download URLs as well; external media downloads need a public signing endpoint
+or matching proxy setup.
+
+| Task | Local | Production |
+| --- | --- | --- |
+| Start containers | `pnpm up:local` | `pnpm up:prod` |
+| Stop containers, keep volumes | `pnpm down:local` | `pnpm down:prod` |
+| Follow logs | `pnpm logs:local` | `pnpm logs:prod` |
+| Other Compose commands | `pnpm docker:local <command>` | `pnpm docker:prod <command>` |
+| Prisma CLI | `pnpm db:local <command>` | `pnpm db:prod <command>` |
+| Run app directly | `pnpm start:local` | `pnpm build:prod && pnpm start:prod` |
+
+`start:local` sets `NODE_ENV=development` and `.env.local`; `start:prod` sets
+`NODE_ENV=production` and `.env.prod`. Nest configuration, logger and Prisma
+share the same file selector. In Compose, production settings are already
+injected from `.env.prod`, so no environment files are baked into the image.
+Running production directly on the host requires host-reachable addresses in
+`.env.prod` instead of Docker service names.
+
 ## Tests
 
 Tests live in a `__test__` subdirectory of their owning module or library.

@@ -2,10 +2,6 @@ import type { EEnvironment } from './config.enum.ts';
 
 /** Resolved application configuration; environment variable names live in the DTO. */
 export interface IAppConfig {
-  whatsapp: IWhatsAppConfig;
-  redis: IRedisConfig;
-  minio: IMinoConfig;
-  databaseUrl?: string;
   nodeEnv: EEnvironment;
   name: string;
   workingDirectory: string;
@@ -14,37 +10,4 @@ export interface IAppConfig {
   corsOrigins: string[];
   port: number;
   apiPrefix: string;
-}
-
-export interface IRedisConfig {
-  host: string;
-  port: number;
-  password?: string;
-  db: number;
-  connectTimeoutMs: number;
-  connectionAttempts: number;
-  retryDelayMs: number;
-  maxRetryDelayMs: number;
-}
-
-export interface IWhatsAppConfig {
-  adminApiKey: string;
-  maxSessions: number;
-  startupConcurrency: number;
-  startupStaggerMs: number;
-  watchdogIntervalMs: number;
-  connectionStuckMs: number;
-  stableConnectionMs: number;
-  pairingTtlMs: number;
-  pairingCodeTtlMs: number;
-  pairingRateLimitMs: number;
-}
-
-export interface IMinoConfig {
-  endpoint: string;
-  port: number;
-  useSsl: boolean;
-  accessKey: string;
-  secretKey: string;
-  bucket: string;
 }

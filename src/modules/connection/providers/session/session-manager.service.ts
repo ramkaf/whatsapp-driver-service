@@ -21,7 +21,6 @@ import type {
   AuthenticationCreds,
   WASocket,
 } from '@whiskeysockets/baileys';
-import { configuer } from '@libs/common';
 import type { IAppConfig } from '@libs/common';
 import { SessionRuntimeService } from './session-runtime.service.ts';
 import { SocketLifecycleService } from '../socket/socket-lifecycle.service.ts';
@@ -40,6 +39,7 @@ import type { SessionRuntime } from '../../interfaces/session-runtime.ts';
 import { CONNECTION_REASONS } from '../../interfaces/connection-status.ts';
 import { PairingMethodEnum } from '../../../sessions/interfaces/session.interface.ts';
 import { classifyDisconnect } from '../../utils/disconnect-classifier.util.ts';
+import { ConfigService } from '@nestjs/config';
 
 // Orchestrates serialized session commands, pairing, and connection recovery.
 @Injectable()
@@ -63,7 +63,7 @@ export class SessionManagerService
     @Inject(SocketFactoryService)
     private readonly factory: SessionSocketFactory,
     private readonly supervisor: ConnectionSupervisorService,
-    @Inject(configuer.KEY) private readonly config: IAppConfig,
+    private readonly configService:ConfigService,
     private readonly runtimeState: SessionRuntimeService,
     private readonly lifecycle: SocketLifecycleService,
   ) {}
@@ -75,7 +75,7 @@ export class SessionManagerService
       if (
         row.isEnabled &&
         [...this.runtimes.values()].filter((entry) => !entry.intentionalStop)
-          .length >= this.config.whatsapp.maxSessions
+          .length >= this.configService.getOrThrow('WA_MAX_SESSIONS')
       )
         throw new ConflictException('Session limit reached');
       runtime = this.runtimeState.create(row);
@@ -251,7 +251,7 @@ export class SessionManagerService
       const socket = this.factory.create(
         runtime.sessionId,
         auth.state,
-        this.config.whatsapp.pairingTtlMs,
+        Number(this.configService.getOrThrow('WA_PAIRING_TTL_MS')),
         () => this.current(runtime, generation) && !!runtime.socket?.ws.isOpen,
       );
       runtime.socket = socket;
@@ -358,7 +358,7 @@ export class SessionManagerService
       runtime.pairingReady = true;
       runtime.qr = {
         value: update.qr,
-        expiresAt: Date.now() + this.config.whatsapp.pairingTtlMs,
+        expiresAt: Date.now() + Number(this.configService.getOrThrow('WA_PAIRING_TTL_MS'))
       };
       this.runtimeState.state(runtime, 'AWAITING_PAIRING');
       await this.repository.updateCurrent(runtime.sessionId, {
@@ -711,7 +711,7 @@ export class SessionManagerService
         };
       if (
         now - runtime.lastCodeRequestAt <
-        this.config.whatsapp.pairingRateLimitMs
+         this.configService.getOrThrow('WA_PAIRING_RATE_LIMIT_MS')
       )
         throw new HttpException(
           'Pairing requests are rate limited',
@@ -732,7 +732,7 @@ export class SessionManagerService
       );
       runtime.code = {
         value: code,
-        expiresAt: Date.now() + this.config.whatsapp.pairingCodeTtlMs,
+        expiresAt: Date.now() + this.configService.getOrThrow('WA_PAIRING_CODE_TTL_MS'),
       };
       this.runtimeState.state(runtime, 'AWAITING_PAIRING');
       return {
@@ -763,7 +763,7 @@ export class SessionManagerService
               !runtime.stable &&
               runtime.connectedAt &&
               now - runtime.connectedAt >=
-                this.config.whatsapp.stableConnectionMs
+                this.configService.getOrThrow('WA_STABLE_CONNECTION_MS')
             ) {
               await this.repository.updateCurrent(runtime.sessionId, {
                 retryCount: 0,
@@ -778,9 +778,11 @@ export class SessionManagerService
           !['CONNECTING', 'RECONNECTING', 'AUTHENTICATING'].includes(
             runtime.status,
           ) ||
-          now - runtime.stateSince < this.config.whatsapp.connectionStuckMs
-        )
+          now - runtime.stateSince <
+            this.configService.getOrThrow<number>('WA_CONNECTION_STUCK_MS')
+        ) {
           return;
+        }
         this.runtimeState.recordDisconnect(
           runtime,
           runtime.status === 'CONNECTED'
@@ -797,7 +799,7 @@ export class SessionManagerService
     if (this.restored || this.stopping) return;
     this.restored = true;
     const sessions = await this.repository.recoverable(
-      this.config.whatsapp.maxSessions,
+      Number(this.configService.getOrThrow('WA_MAX_SESSIONS')),
     );
     let index = 0;
     const worker = async () => {
@@ -805,7 +807,7 @@ export class SessionManagerService
         const session = sessions[index++]!;
         if (index > 1) {
           try {
-            await delay(this.config.whatsapp.startupStaggerMs, undefined, {
+            await delay( this.configService.getOrThrow('WA_STARTUP_STAGGER_MS'), undefined, {
               signal: this.startupAbort.signal,
             });
           } catch {
@@ -815,7 +817,7 @@ export class SessionManagerService
         if (this.stopping) return;
         try {
           await this.start(session.id);
-          const deadline = Date.now() + this.config.whatsapp.connectionStuckMs;
+          const deadline = Date.now() + this.configService.getOrThrow('WA_CONNECTION_STUCK_MS');
           // Keep the startup slot until the initial attempt reaches a result.
           while (
             !this.stopping &&
@@ -842,7 +844,7 @@ export class SessionManagerService
     };
     // Recovery continues in the background so administration/health remain usable.
     this.recovery = Promise.all(
-      Array.from({ length: this.config.whatsapp.startupConcurrency }, worker),
+      Array.from({ length: this.configService.getOrThrow('WA_STARTUP_CONCURRENCY') }, worker),
     )
       .then(() => undefined)
       .catch(() => this.logger.error({ event: 'startup_recovery_failed' }));

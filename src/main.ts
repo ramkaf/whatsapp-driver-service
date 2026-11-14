@@ -1,4 +1,5 @@
-import { configuer } from '@libs/common';
+import { configure, AfraLogger, InitAfraLogger } from '@libs/common';
+InitAfraLogger();
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 import type { IAppConfig } from '../libs/common/src/config/index.ts';
@@ -13,7 +14,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: new Logger(),
   });
-  const config = app.get<IAppConfig>(configuer.KEY);
+  const config = app.get<IAppConfig>(configure.KEY);
   app.enableShutdownHooks();
   app.useGlobalPipes(
     new ValidationPipe({

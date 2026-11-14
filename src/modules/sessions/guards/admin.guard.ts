@@ -1,23 +1,22 @@
 import {
   CanActivate,
   ExecutionContext,
-  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
-import { configuer } from '@libs/common';
-import type { IAppConfig } from '@libs/common';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AdminGuard implements CanActivate {
   private readonly digest: Buffer;
-  constructor(@Inject(configuer.KEY) config: IAppConfig) {
-    if (config.whatsapp.adminApiKey.length < 32)
+  constructor(private readonly configService:ConfigService) {
+    const adminApiKey = this.configService.getOrThrow('WA_ADMIN_API_KEY')
+    if (adminApiKey.length < 32)
       throw new Error('WA_ADMIN_API_KEY must contain at least 32 characters');
     this.digest = createHash('sha256')
-      .update(config.whatsapp.adminApiKey)
+      .update(adminApiKey)
       .digest();
   }
   canActivate(context: ExecutionContext): boolean {

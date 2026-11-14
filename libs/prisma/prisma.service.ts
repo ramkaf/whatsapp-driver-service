@@ -27,7 +27,7 @@ export class PrismaService
       password: database.password,
       database: database.database,
       connectionLimit: database.connectionLimit,
-      allowPublicKeyRetrieval: database.allowPublicKeyRetrieval,
+      allowPublicKeyRetrieval: true
     });
 
     super({ adapter, log: ['warn', 'error'] });

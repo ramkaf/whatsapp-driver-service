@@ -50,6 +50,7 @@ git update-index --skip-worktree storage/a.jsonl
 .env.test.local
 .env.production.local
 .env.local
+.env.prod
 
 # temp directory
 .temp

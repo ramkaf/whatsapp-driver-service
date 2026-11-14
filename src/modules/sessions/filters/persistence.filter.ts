@@ -1,3 +1,4 @@
+
 import { Prisma } from '@database/client.js';
 import {
   ArgumentsHost,
@@ -11,51 +12,69 @@ import type { Response } from 'express';
 @Catch()
 export class PersistenceFilter implements ExceptionFilter {
   private readonly logger = new Logger(PersistenceFilter.name);
-  catch(error: Error & { code?: string }, host: ArgumentsHost) {
+
+  catch(error: unknown, host: ArgumentsHost): void {
+    const response = host.switchToHttp().getResponse<Response>();
+
     if (error instanceof HttpException) {
-      host
-        .switchToHttp()
-        .getResponse<Response>()
-        .status(error.getStatus())
+      const status = error.getStatus();
+      const body = error.getResponse();
+
+      response
+        .status(status)
         .json(
-          typeof error.getResponse() === 'string'
-            ? { statusCode: error.getStatus(), message: error.getResponse() }
-            : error.getResponse(),
+          typeof body === 'string'
+            ? { statusCode: status, message: body }
+            : body,
         );
+
       return;
     }
+
+    const exception =
+      error instanceof Error
+        ? error
+        : new Error(String(error));
+
+    const prismaCode =
+      error instanceof Prisma.PrismaClientKnownRequestError
+        ? error.code
+        : undefined;
+
     const persistence =
       error instanceof Prisma.PrismaClientKnownRequestError ||
       error instanceof Prisma.PrismaClientUnknownRequestError ||
       error instanceof Prisma.PrismaClientInitializationError ||
-      error instanceof Prisma.PrismaClientValidationError ||
-      error instanceof AggregateError;
+      error instanceof Prisma.PrismaClientValidationError;
+
     const status =
-      error.code === 'P2002'
+      prismaCode === 'P2002'
         ? 409
-        : error.code === 'P2025'
+        : prismaCode === 'P2025'
           ? 404
           : persistence
             ? 503
             : 500;
+
+    // Log the actual exception details.
     this.logger.error({
       event: 'request_failed',
-      code: error.code ?? error.name,
+      name: exception.name,
+      message: exception.message,
+      code: prismaCode ?? ('code' in exception ? exception.code : undefined),
+      stack: exception.stack,
     });
-    host
-      .switchToHttp()
-      .getResponse<Response>()
-      .status(status)
-      .json({
-        statusCode: status,
-        message:
-          status === 409
-            ? 'The operation conflicts with existing data'
-            : status === 404
-              ? 'Session not found'
-              : status === 503
-                ? 'Persistence is unavailable'
-                : 'Internal server error',
-      });
+
+    response.status(status).json({
+      statusCode: status,
+      message:
+        status === 409
+          ? 'The operation conflicts with existing data'
+          : status === 404
+            ? 'Resource not found'
+            : status === 503
+              ? 'Persistence is unavailable'
+              : 'Internal server error',
+    });
   }
 }
