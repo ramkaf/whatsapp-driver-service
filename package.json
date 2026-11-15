@@ -12,8 +12,8 @@
   "scripts": {
     "up": "pnpm run up:local",
     "down": "pnpm run down:local",
-    "docker:local": "docker compose --env-file .env.local -f docker-compose.local.yml",
-    "docker:prod": "docker compose --env-file .env.prod -f docker-compose.prod.yml",
+    "docker:local": "docker compose --env-file .env.local -f docker-compose.yml",
+    "docker:prod": "docker compose --env-file .env.prod -f docker-compose.yml",
     "up:local": "pnpm run docker:local up -d --wait",
     "down:local": "pnpm run docker:local down",
     "up:prod": "pnpm run docker:prod up -d --build --wait",

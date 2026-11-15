@@ -1,40 +1,26 @@
+name: whatsapp-driver-local
+
 services:
-  docs:
-    container_name: mkdocs-docs
-    build:
-      context: .
-      dockerfile: docker/DockerfileDocs
-    ports:
-      - '4009:8080'
-    volumes:
-      - ./docs:/app/docs
-      - ./mkdocs.yml:/app/mkdocs.yml
-    restart: unless-stopped
   mysql:
-    image: public.ecr.aws/docker/library/mysql:8.4
-    container_name: whatsapp-mysql
+    image: ${MYSQL_DOCKER_IMAGE}
     restart: unless-stopped
-
-    command:
-      - --mysql-native-password=ON
-
     ports:
-      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_PORT:-3307}:3306"
-
+      - '127.0.0.1:${DB_PORT:?DB_PORT is required}:3306'
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${DB_NAME:?DB_NAME is required}
+      MYSQL_USER: ${DB_USER:?DB_USER is required}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MYSQL_SHADOW_DATABASE: ${DB_SHADOW_NAME:?DB_SHADOW_NAME is required}
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./docker/mysql/local-init.sh:/docker-entrypoint-initdb.d/10-local-init.sh:ro
+      
   redis:
-    image: public.ecr.aws/docker/library/redis:7
-    container_name: whatsapp-redis
+    image: ${REDIS_DOCKER_IMAGE}
     restart: unless-stopped
     ports:
-      - '${REDIS_HOST:-127.0.0.1}:${REDIS_PORT:-6379}:6379'
+      - '127.0.0.1:${REDIS_PORT:?REDIS_PORT is required}:6379'
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     command:
@@ -43,40 +29,19 @@ services:
       - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
     volumes:
       - redis_data:/data
-    healthcheck:
-      test:
-        [
-          'CMD-SHELL',
-          'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG',
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
+
   minio:
-      image: public.ecr.aws/y9w4h2u9/minio:RELEASE.2025-09-07T16-13-09Z 
-      container_name: minio
-      restart: unless-stopped
-
-      command:
-        - server
-        - /data
-        - --address
-        - ":9000"
-        - --console-address
-        - ":9001"
-
-      environment:
-        MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-        MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-
-      ports:
-        - "${MINIO_BIND_ADDRESS:-127.0.0.1}:${MINIO_API_HOST_PORT:-9003}:9000"
-        - "${MINIO_BIND_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9005}:9001"
-
-      volumes:
-        - minio_data:/data
-
+    image: ${MINIO_DOCKER_IMAGE}
+    restart: unless-stopped
+    command: server /data --address ':9000' --console-address ':9001'
+    ports:
+      - '127.0.0.1:${MINIO_PORT:?MINIO_PORT is required}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:?MINIO_CONSOLE_PORT is required}:9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+    volumes:
+      - minio_data:/data
 volumes:
   mysql_data:
   redis_data:
